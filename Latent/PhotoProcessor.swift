@@ -1,6 +1,7 @@
 import UIKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 
 struct ProcessedCapture: Sendable {
     let files: CaptureFiles
@@ -13,14 +14,12 @@ enum PhotoProcessingError: LocalizedError {
 }
 
 enum PhotoProcessor {
+    /// Shared: creating a CIContext per capture is expensive. CIContext is safe to use across threads.
+    private static let ciContext = CIContext()
+
     static func process(data: Data, orientation: FrameOrientation) throws -> ProcessedCapture {
-        guard let input = UIImage(data: data) else { throw PhotoProcessingError.unreadableImage }
-        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
-        // Drawing applies EXIF rotation before calculating a portrait/landscape crop.
-        let normalized = UIGraphicsImageRenderer(size: input.size, format: format).image { _ in
-            input.draw(in: CGRect(origin: .zero, size: input.size))
-        }
-        guard let cg = normalized.cgImage else { throw PhotoProcessingError.unreadableImage }
+        // EXIF rotation is applied while decoding, at full size, without redrawing the image.
+        guard let cg = uprightImage(from: data) else { throw PhotoProcessingError.unreadableImage }
         let crop = CropGeometry.rect(width: Double(cg.width), height: Double(cg.height), aspectRatio: orientation.aspectRatio)
         guard let cropped = cg.cropping(to: crop.integral) else { throw PhotoProcessingError.unreadableImage }
         // Original Latent look; this is not an official film-stock emulation.
@@ -28,13 +27,29 @@ enum PhotoProcessor {
         color.inputImage = CIImage(cgImage: cropped)
         color.saturation = 0.9; color.contrast = 1.04; color.brightness = 0.01
         guard let output = color.outputImage,
-              let rendered = CIContext().createCGImage(output, from: output.extent) else { throw PhotoProcessingError.unreadableImage }
+              let rendered = ciContext.createCGImage(output, from: output.extent) else { throw PhotoProcessingError.unreadableImage }
         let image = UIImage(cgImage: rendered)
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
         let scale = min(1, 500 / max(image.size.width, image.size.height))
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let thumbnail = UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
         guard let developed = image.jpegData(compressionQuality: 0.94), let small = thumbnail.jpegData(compressionQuality: 0.8) else { throw PhotoProcessingError.unreadableImage }
         return ProcessedCapture(files: CaptureFiles(original: data, developed: developed, thumbnail: small), orientation: orientation)
+    }
+
+    /// Full-resolution image with the EXIF orientation applied.
+    private static func uprightImage(from data: Data) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     static func framedExport(imageURL: URL, title: String, number: Int) throws -> URL {
