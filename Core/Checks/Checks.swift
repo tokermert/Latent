@@ -80,7 +80,8 @@ struct Checks {
         try require(CropGeometry.rect(width: 4032, height: 3024, aspectRatio: 1.5) == CGRect(x: 0, y: 168, width: 4032, height: 2688), "Landscape crop mismatch")
         print("PASS: centered 2:3 and 3:2 crop geometry")
         try await storageChecks()
-        print("15 core checks passed.")
+        try await rollRuleChecks()
+        print("20 core checks passed.")
     }
 
     static func photoCount(_ directory: URL) throws -> Int {
@@ -111,7 +112,7 @@ struct Checks {
         let appended = try await migrating.append(to: migrated[0].id, orientation: .portrait, files: files)
         try require(appended[0].frames.last?.number == 4, "First v2 capture misnumbered")
         let header = try JSONSerialization.jsonObject(with: Data(contentsOf: v1Dir.appendingPathComponent("library.json"))) as? [String: Any]
-        try require(header?["version"] as? Int == 2, "Commit did not write version 2")
+        try require(header?["version"] as? Int == RollRepository.manifestVersion, "Commit did not write the current manifest version")
         let reread = try await RollRepository(directory: v1Dir).load()
         try require(reread == appended, "Migrated library changed on reload")
         print("PASS: version 1 manifest migrates without loss")
@@ -188,5 +189,66 @@ struct Checks {
         ShareExports.clear(in: tmp)
         try require(!FileManager.default.fileExists(atPath: ShareExports.directory(in: tmp).path), "Share exports not cleared")
         print("PASS: temporary share exports cleared")
+    }
+
+    static func rollRuleChecks() async throws {
+        let files = CaptureFiles(original: Data([1, 2, 3]), developed: Data([4, 5]), thumbnail: Data([6]))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("LatentSmoke-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let manifest = dir.appendingPathComponent("library.json")
+        let repository = RollRepository(directory: dir); _ = try await repository.load()
+
+        // Single active roll
+        let london = try await repository.createRoll(title: "Gizli Londra")[0].id
+        _ = try await repository.append(to: london, orientation: .portrait, files: files)
+        let before = try Data(contentsOf: manifest)
+        do { _ = try await repository.createRoll(title: "Paris"); throw Failure.check("Second open roll accepted") }
+        catch LibraryError.activeRollExists { }
+        try require(try Data(contentsOf: manifest) == before, "Rejected roll changed the manifest")
+        print("PASS: only one roll may be open")
+
+        let rolls = try await repository.createRoll(title: "Gizli Paris", finishingActive: true)
+        try require(rolls.count == 2 && !rolls[0].isFinished && rolls[1].isFinished && rolls[1].frames.count == 1, "finishingActive wrong")
+        let reread = try await RollRepository(directory: dir).load()
+        try require(reread == rolls, "finishingActive not saved in one commit")
+        let active = await repository.activeRoll()
+        try require(active?.id == rolls[0].id, "Active roll is not the newest open roll")
+        print("PASS: finishing the open roll and starting a new one")
+
+        // Legacy archive with two open rolls: untouched, still blocks a new roll
+        let legacyDir = FileManager.default.temporaryDirectory.appendingPathComponent("LatentSmoke-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: legacyDir) }
+        try FileManager.default.createDirectory(at: legacyDir, withIntermediateDirectories: true)
+        let newer = UUID()
+        let legacy = Data(#"{"version":2,"rolls":[{"id":"\#(UUID().uuidString)","title":"A","createdAt":0,"film":"LATENT COLOR 400","frames":[],"exposuresUsed":0},{"id":"\#(newer.uuidString)","title":"B","createdAt":50,"film":"LATENT COLOR 400","frames":[],"exposuresUsed":0}]}"#.utf8)
+        try legacy.write(to: legacyDir.appendingPathComponent("library.json"))
+        let legacyRepository = RollRepository(directory: legacyDir)
+        let legacyRolls = try await legacyRepository.load()
+        try require(legacyRolls.allSatisfy { !$0.isFinished } && FilmRoll.activeRoll(in: legacyRolls)?.id == newer, "Legacy open rolls changed")
+        do { _ = try await legacyRepository.createRoll(title: "C"); throw Failure.check("Legacy archive accepted a third open roll") }
+        catch LibraryError.activeRollExists { }
+        try require(try Data(contentsOf: legacyDir.appendingPathComponent("library.json")) == legacy, "Legacy manifest rewritten")
+        print("PASS: legacy archive with several open rolls is left alone")
+
+        // Counters persist in manifest v3
+        _ = try await repository.recordAlbumOpened(london)
+        _ = try await repository.recordAlbumOpened(london)
+        let counted = try await repository.recordShare(london)
+        let header = try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any]
+        let countedReread = try await RollRepository(directory: dir).load()
+        try require(counted[1].albumOpenCount == 2 && counted[1].shareCount == 1 && countedReread == counted
+                    && header?["version"] as? Int == 3, "Counters not persisted in v3")
+        try require(legacyRolls.allSatisfy { $0.albumOpenCount == 0 && $0.shareCount == 0 }, "v2 counters not defaulted to 0")
+        print("PASS: album-open and share counters (manifest v3)")
+
+        // Feedback summary: numbers only
+        let summary = FeedbackSummary(rolls: counted, appVersion: "0.1.0 (1)")
+        let json = String(decoding: try summary.jsonData(), as: UTF8.self)
+        try require(summary.rollCount == 2 && summary.rolls.map(\.finishKind) == [.early, .inProgress], "Summary finish kinds wrong")
+        try require(summary.rolls[0].exposuresUsed == 1 && summary.rolls[0].albumOpenCount == 2 && summary.rolls[0].shareCount == 1
+                    && summary.rolls[0].orientations.portrait == 1 && summary.rolls[0].deletedFrames == 0, "Summary counts wrong")
+        try require(!json.contains("Gizli") && !counted.contains { json.contains($0.id.uuidString) }
+                    && !counted.flatMap(\.frames).contains { json.contains($0.id.uuidString) }, "Summary leaks titles or ids")
+        print("PASS: feedback summary has counts and no titles or ids")
     }
 }
