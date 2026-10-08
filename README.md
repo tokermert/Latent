@@ -55,7 +55,7 @@ cd Core
 swift test
 ```
 
-Dosyalar `Application Support/Latent/` altında tutulur. `library.json` atomik yazılır; yeni fotoğraf dosyaları yazıldıktan sonra sayaç güncellenir. Kaydetme hatasında yalnızca o çekime ait yeni dosyalar geri alınır. Okunamayan arşiv otomatik sıfırlanmaz. Ani süreç sonlandırmasının dosya yazımı ile manifest yazımı arasına denk gelmesi durumunda sahipsiz dosyalar kalabilir; bunlar mevcut fotoğrafları korumak için otomatik silinmez.
+Dosyalar `Application Support/Latent/` altında tutulur. `library.json` atomik yazılır; yeni fotoğraf dosyaları yazıldıktan sonra sayaç güncellenir. Kaydetme hatasında yalnızca o çekime ait yeni dosyalar geri alınır. Okunamayan arşiv otomatik sıfırlanmaz. Ani süreç sonlandırmasının dosya yazımı ile manifest yazımı arasına (ya da silme sırasında manifest ile dosya silimi arasına) denk gelmesi durumunda sahipsiz dosyalar kalabilir. Bunlar bir sonraki açılışta, yalnızca manifest başarıyla okunduysa temizlenir: sadece `<UUID>-<varyant>.jpg` adlı ve manifestte karşılığı olmayan dosyalar silinir; başka adlı dosyalara dokunulmaz; manifest yoksa, okunamıyorsa veya desteklenmiyorsa hiçbir dosya silinmez. Rulo/kare silmede önce manifest atomik yazılır, sonra dosyalar silinir. Silinen kare 36'lık hakkı geri vermez; kare numaraları çekim sırasını korur. Manifest şeması `version 2`'dir; `version 1` arşivler açılışta kayıpsız taşınır ve ilk kayıtta v2 olarak yazılır. Paylaşım için üretilen geçici çerçeveli görseller (`tmp/LatentShares`) uygulama açılışında temizlenir.
 
 ## Gerçek cihazda ilk kabul kontrolü
 
