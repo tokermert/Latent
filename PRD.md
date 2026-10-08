@@ -263,7 +263,40 @@ MVP tamamlanmış sayılırsa:
 
 İlk aşamada sosyal takipçi, beğeni ve günlük aktif kullanıcı sayısı ana başarı ölçütü değildir.
 
-**Ölçüm yöntemi (karar bekliyor):** MVP'de hesap ve sunucu yok. Seçenekler: (a) TestFlight + görüşmeler ve kullanıcının isteğe bağlı paylaştığı anonim manifest özeti, (b) gizlilik dostu anonim analytics SDK. (b) seçilirse `PrivacyInfo.xcprivacy` ve App Store gizlilik etiketi güncellenmelidir. Varsayılan öneri: (a).
+### Ölçüm yöntemi: TestFlight beta (karar verildi)
+
+MVP'de analytics SDK ve sunucu yoktur. Ölçüm, kapalı bir TestFlight betası üzerinden yapılır.
+
+**Katılımcılar:** 10–20 kişi; önümüzdeki 4–6 hafta içinde en az bir gezi veya şehir yürüyüşü planı olan, §3'teki profile uyan iPhone kullanıcıları.
+
+**Akış:**
+1. Kurulum sonrası 10 dk karşılama görüşmesi: beklenti ve şu anki gezi fotoğrafı alışkanlığı.
+2. Kullanıcı Latent'i gerçek bir gezide serbestçe kullanır; yönlendirme yapılmaz.
+3. Gezi bitiminden 2–3 gün sonra 20 dk görüşme: albüm birlikte açılır, sesli düşünme.
+4. 2 hafta sonra kısa takip: albüme geri dönüldü mü, ikinci rulo başladı mı?
+
+**Veri kaynakları:**
+- **Rulo özeti (uygulama içi, isteğe bağlı):** Albüm ekranında "Geri bildirim için rulo özetini paylaş" seçeneği, sistem paylaşım paneliyle küçük bir JSON metni gönderir. İçerik yalnızca sayısal ve zamansal veridir: rulo sayısı, rulo başına kare sayısı, kare zaman damgaları, yön dağılımı, bitirme şekli (36 / erken), silinen kare sayısı, paylaşım eylemi sayısı, albüm açılma sayısı. **Fotoğraf, rulo adı ve konum içermez.** Otomatik gönderim yoktur.
+- **TestFlight:** Çökme raporları ve ekran görüntülü geri bildirim.
+- **Görüşmeler:** Nitel sinyaller (kamera hissi, kısıtlayıcı kadraj, albümün geri dönülebilirliği).
+
+**Sinyal → kaynak eşleşmesi:**
+
+| Sinyal | Kaynak |
+|---|---|
+| İlk rulo + ilk kare | Rulo özeti, karşılama sonrası kontrol |
+| 2. ve 5. kareye ulaşma | Rulo özeti (zaman damgaları) |
+| En az 6 kareyle bitirme | Rulo özeti (bitirme şekli) |
+| Albümü tekrar açma | Rulo özeti (albüm açılma sayısı) + takip görüşmesi |
+| Paylaşım | Rulo özeti (paylaşım eylemi sayısı) |
+| İkinci rulo | Rulo özeti + 2 hafta takip |
+| Nitel his | Görüşmeler |
+
+**Başarı eşiği (ilk beta için öneri):** Katılımcıların ≥%60'ı bir ruloyu ≥6 kareyle bitirir, ≥%40'ı albüme gezi sonrası en az bir kez geri döner, ≥%25'i kendiliğinden ikinci rulo başlatır.
+
+**Gizlilik:** Uygulama veri toplamadığı için `PrivacyInfo.xcprivacy` değişmez; rulo özeti kullanıcının elle paylaştığı bir dosyadır. Katılımcılara özetin içeriği önceden gösterilir.
+
+**Ön koşullar:** Apple Developer Program üyeliği, benzersiz bundle identifier (`com.example.Latent` yerine), App Store Connect kaydı, app icon, TestFlight beta açıklaması ve harici test için Beta App Review.
 
 ## 13. Riskler ve kararlar
 
@@ -338,9 +371,9 @@ Fotoğraf varlıkları ve manifest ayrı dosyalarda tutulduğu için süreç ani
 - Gerçek film markaları kullanılacaksa lisans ve isimlendirme yaklaşımı ne olacak?
 - Yerel arşivin yedeklenmesi için iCloud/CloudKit hangi doğrulama sinyalinden sonra eklenecek?
 - ~~App Store ilk sürümünde yalnızca iPhone mu desteklenecek?~~ → Evet, yalnızca iPhone.
-- MVP başarı sinyalleri hangi yöntemle ölçülecek? (§12)
+- ~~MVP başarı sinyalleri hangi yöntemle ölçülecek?~~ → TestFlight betası + isteğe bağlı rulo özeti + görüşmeler (§12).
 
 ## 17. Değişiklik geçmişi
 
-- **0.2 (8 Ekim 2026):** Tek aktif rulo kuralı; rulo adı değiştirme, rulo/kare silme (silme kare hakkı iade etmez), kapak seçimi; ~12 MP kayıt, JPEG orijinal, iCloud yedeği notu; cihaz yönünden kayıt (`RotationCoordinator`); orphan ve geçici dosya temizliği MVP'ye alındı; manifest sürümleme; "35 mm film" ifadesi; ölçüm yöntemi açık karar olarak eklendi; açık soruların bir kısmı yanıtlandı.
+- **0.2 (8 Ekim 2026):** Tek aktif rulo kuralı; rulo adı değiştirme, rulo/kare silme (silme kare hakkı iade etmez), kapak seçimi; ~12 MP kayıt, JPEG orijinal, iCloud yedeği notu; cihaz yönünden kayıt (`RotationCoordinator`); orphan ve geçici dosya temizliği MVP'ye alındı; manifest sürümleme; "35 mm film" ifadesi; ölçüm yöntemi TestFlight betası olarak belirlendi; açık soruların bir kısmı yanıtlandı.
 - **0.1 (8 Ekim 2026):** İlk MVP tanımı.
