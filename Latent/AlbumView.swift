@@ -13,10 +13,13 @@ struct AlbumView: View {
             if let roll {
                 VStack(alignment: .leading, spacing: 26) {
                     VStack(alignment: .leading, spacing: 10) {
-                        MicroLabel(text: "\(roll.frames.count) KARE · 35 mm")
-                        Text(roll.title).font(.system(size: 44, weight: .medium)).tracking(-2)
+                        MicroLabel(text: "\(roll.frames.count) KARE · 35 mm FİLM")
+                        Text(roll.title).tracking(-2).displayFont(size: 44)
                         MicroLabel(text: roll.film)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(roll.title), \(roll.frames.count) kare, \(roll.film), 35 mm film")
+                    .accessibilityAddTraits(.isHeader)
                     if roll.frames.isEmpty {
                         ContentUnavailableView("Rulon hazır", systemImage: "camera", description: Text("İlk kareni çekerek başla."))
                     } else {
@@ -24,11 +27,14 @@ struct AlbumView: View {
                             ForEach(Array(roll.frames.enumerated()), id: \.element.id) { index, frame in
                                 NavigationLink { PhotoDetailView(rollID: rollID, frameID: frame.id) } label: {
                                     VStack(alignment: .leading, spacing: 8) {
-                                        FilmBorder(number: index + 1, compact: true) {
+                                        FilmBorder(number: index + 1, compact: true, film: roll.film) {
                                             StoredPhoto(url: library.url(frame), aspectRatio: frame.orientation.aspectRatio)
                                         }
                                         MicroLabel(text: String(format: "%02d", index + 1))
                                     }
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(LatentAccessibility.frame(rollTitle: roll.title, number: index + 1, capturedAt: frame.capturedAt))
+                                    .accessibilityAddTraits(.isImage)
                                 }.buttonStyle(.plain)
                             }
                         }
@@ -77,10 +83,14 @@ struct PhotoDetailView: View {
         ScrollView {
             if let frame, let roll {
                 VStack(alignment: .leading, spacing: 24) {
-                    FilmBorder(number: number) { StoredPhoto(url: library.url(frame, variant: .developed), aspectRatio: frame.orientation.aspectRatio) }
+                    FilmBorder(number: number, film: roll.film) { StoredPhoto(url: library.url(frame, variant: .developed), aspectRatio: frame.orientation.aspectRatio) }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(LatentAccessibility.frame(rollTitle: roll.title, number: number, capturedAt: frame.capturedAt))
+                        .accessibilityAddTraits(.isImage)
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 5) { Text(roll.title).font(.headline); Text(frame.capturedAt, format: .dateTime.day().month().year()).font(.caption) }
-                        Spacer(); MicroLabel(text: String(format: "COLOR 400\n%02d / 36", number))
+                        Spacer(); MicroLabel(text: "\(roll.filmShortName)\n" + String(format: "%02d / %02d", number, FilmRoll.capacity))
+                            .accessibilityLabel("\(roll.film), kare \(number) / \(FilmRoll.capacity)")
                     }
                 }.padding(30).background(.white).padding(.vertical, 20)
             }

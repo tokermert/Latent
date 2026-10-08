@@ -18,11 +18,47 @@ struct MicroLabel: View {
     }
 }
 
+/// Büyük başlıklar için sabit punto yerine Dynamic Type ile ölçeklenen sistem fontu.
+/// Tasarımdaki taban punto korunur; büyük yazı ayarında `relativeTo` stiliyle birlikte büyür.
+struct DisplayFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+    }
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight)).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension View {
+    func displayFont(size: CGFloat, weight: Font.Weight = .medium, relativeTo style: Font.TextStyle = .largeTitle) -> some View {
+        modifier(DisplayFont(size: size, weight: weight, relativeTo: style))
+    }
+}
+
+extension FilmRoll {
+    /// "LATENT COLOR 400" → "COLOR 400": dar etiketlerde marka öneki tekrarlanmaz.
+    var filmShortName: String { film.hasPrefix("LATENT ") ? String(film.dropFirst("LATENT ".count)) : film }
+    /// "07 / 36" biçiminde sayaç; kapasite `FilmRoll.capacity`'den gelir.
+    var counterText: String { String(format: "%02d / %02d", frames.count, Self.capacity) }
+}
+
+/// VoiceOver metinleri. Görsel etiketler (ör. "07", "400 · 07 ▷") yerine tek cümle okunur.
+enum LatentAccessibility {
+    static func date(_ date: Date) -> String { date.formatted(.dateTime.day().month(.abbreviated).year()) }
+    /// Örnek: "London, kare 7, 12 Eki 2026"
+    static func frame(rollTitle: String, number: Int, capturedAt: Date) -> String {
+        "\(rollTitle), kare \(number), \(date(capturedAt))"
+    }
+}
+
 struct BrandMark: View {
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: 3) {
-            Text("latent").font(.system(size: 33, weight: .medium)).tracking(-1.7)
-            Circle().fill(LatentTheme.orange).frame(width: 6, height: 6)
+            Text("latent").tracking(-1.7).displayFont(size: 33, relativeTo: .title)
+            Circle().fill(LatentTheme.orange).frame(width: 6, height: 6).accessibilityHidden(true)
         }.foregroundStyle(LatentTheme.ink).accessibilityElement(children: .combine)
     }
 }
@@ -30,8 +66,15 @@ struct BrandMark: View {
 struct FilmBorder<Content: View>: View {
     var number: Int
     var compact = false
+    /// Kenar baskısı; varsayılan ilk film görünümü. Rulo bilinen yerlerde `roll.film` geçilir.
+    var film = "LATENT COLOR 400"
     @ViewBuilder var content: () -> Content
     private var side: CGFloat { compact ? 8 : 16 }
+    /// Kompakt kenarda yalnızca son kelime (ör. "400") basılır.
+    private var edgeText: String {
+        let film = compact ? (self.film.split(separator: " ").last.map(String.init) ?? self.film) : self.film
+        return "\(film) · \(String(format: "%02d", number)) ▷"
+    }
     var body: some View {
         content()
             .clipShape(RoundedRectangle(cornerRadius: compact ? 3 : 6))
@@ -44,7 +87,7 @@ struct FilmBorder<Content: View>: View {
                 }.padding(.trailing, compact ? 3 : 5).accessibilityHidden(true)
             }
             .overlay(alignment: .bottomLeading) {
-                Text(compact ? String(format: "400 · %02d ▷", number) : String(format: "LATENT COLOR 400 · %02d ▷", number))
+                Text(edgeText)
                     .font(.system(size: compact ? 7 : 9, design: .monospaced)).tracking(0.5)
                     .foregroundStyle(LatentTheme.gold).padding(.leading, side).padding(.bottom, compact ? 5 : 8)
                     .accessibilityHidden(true)
