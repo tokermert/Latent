@@ -68,8 +68,8 @@ final class CameraModel: ObservableObject {
         makeRotationCoordinator()
     }
 
-    /// Needs both the device and the on-screen preview layer; SwiftUI recreates the layer
-    /// when the layout switches between portrait and landscape.
+    /// Needs both the device and the on-screen preview layer. The layer normally lives as long
+    /// as the camera screen; if SwiftUI ever recreates it, the coordinator is rebuilt.
     private func makeRotationCoordinator() {
         rotationObservations = []
         rotationCoordinator = nil
@@ -170,17 +170,19 @@ struct CameraView: View {
                     Spacer()
                     MicroLabel(text: String(format: "%02d / 36", roll?.frames.count ?? 0))
                 }.padding(.horizontal, 24)
-                if landscape {
-                    HStack(spacing: 30) {
-                        viewfinder(orientation: orientation).frame(maxWidth: .infinity)
-                        controls().frame(width: 120)
-                    }.padding(.horizontal, 24)
-                } else {
-                    viewfinder(orientation: orientation).frame(maxHeight: max(140, geometry.size.height - 245))
-                        .padding(.horizontal, 24)
-                    HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: "COLOR 400") }.padding(.horizontal, 28)
-                    controls()
-                }
+                // One hierarchy for both layouts: switching branches would recreate the preview
+                // view, its layer (a new session connection) and the rotation coordinator on
+                // every turn, which stalls the main thread mid-rotation.
+                let layout = landscape ? AnyLayout(HStackLayout(spacing: 30)) : AnyLayout(VStackLayout(spacing: 16))
+                layout {
+                    viewfinder(orientation: orientation)
+                        .frame(maxWidth: landscape ? .infinity : nil, maxHeight: landscape ? nil : max(140, geometry.size.height - 245))
+                        .padding(.horizontal, landscape ? 0 : 24)
+                    if !landscape {
+                        HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: "COLOR 400") }.padding(.horizontal, 28)
+                    }
+                    controls().frame(width: landscape ? 120 : nil)
+                }.padding(.horizontal, landscape ? 24 : 0)
                 if let message = camera.errorMessage {
                     Text(message).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
                     if camera.pending != nil {
