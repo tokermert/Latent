@@ -83,28 +83,35 @@ enum FilmImprint {
     }
     private static let edgeDate = formatter("dd.MM.yy")
     private static let stampDate = formatter("''yy MM dd")
+
+    /// Ayarlar'daki "Tarih damgası" anahtarı (`@AppStorage`). Kenar tarihi bu ayardan etkilenmez.
+    static let showStampKey = "showDateStamp"
 }
 
-/// Fotoğrafın sağ alt köşesine turuncu tarih damgası bindirir. VoiceOver'dan gizlidir;
-/// tarih zaten kare etiketinde okunur.
+/// Fotoğrafın sağ alt köşesine turuncu tarih damgası bindirir. Ayarlardan kapatılabilir.
+/// VoiceOver'dan gizlidir; tarih zaten kare etiketinde okunur.
 struct DateStamp: ViewModifier {
     let date: Date
+    @AppStorage(FilmImprint.showStampKey) private var showStamp = true
     func body(content: Content) -> some View {
         content.overlay {
-            GeometryReader { proxy in
-                let size = max(proxy.size.width, proxy.size.height) * FilmImprint.stampScale
-                Text(FilmImprint.stamp(date))
-                    .font(.system(size: size, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(FilmImprint.stampColor)
-                    .blur(radius: size * 0.02)
-                    .shadow(color: FilmImprint.stampColor.opacity(0.7), radius: size * 0.3)
-                    .lineLimit(1).fixedSize()
-                    .padding(.trailing, size * 1.1).padding(.bottom, size * 0.8)
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottomTrailing)
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+            if showStamp { stamp }
         }
+    }
+    private var stamp: some View {
+        GeometryReader { proxy in
+            let size = max(proxy.size.width, proxy.size.height) * FilmImprint.stampScale
+            Text(FilmImprint.stamp(date))
+                .font(.system(size: size, weight: .semibold, design: .monospaced))
+                .foregroundStyle(FilmImprint.stampColor)
+                .blur(radius: size * 0.02)
+                .shadow(color: FilmImprint.stampColor.opacity(0.7), radius: size * 0.3)
+                .lineLimit(1).fixedSize()
+                .padding(.trailing, size * 1.1).padding(.bottom, size * 0.8)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottomTrailing)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

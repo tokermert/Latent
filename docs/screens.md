@@ -1,6 +1,6 @@
 # Latent · Ekran envanteri
 
-**Durum:** 8 Ekim 2026 · `agent/ui` ikinci tur (film kenarı + tarih damgası)  
+**Durum:** 8 Ekim 2026 · `agent/ui` ikinci tur (film kenarı + tarih damgası; ayarlar, silme/ad/kapak, tek aktif rulo — geçici)  
 **Amaç:** Her ekranın bugün kodda ne yaptığını, PRD §7 ile farklarını ve Mert'le konuşulacak açık tasarım sorularını tek yerde toplamak. Ekran sohbetinin başlangıç noktasıdır; kararlar alındıkça bu dosya güncellenir.
 
 Akış: **Arşiv → (Yeni rulo) → Kamera** ve **Arşiv → Albüm → Tek kare**. Kamera hem arşivden hem albümden tam ekran açılır.
@@ -12,6 +12,7 @@ Akış: **Arşiv → (Yeni rulo) → Kamera** ve **Arşiv → Albüm → Tek kar
 | Kamera | `Latent/CameraView.swift` | Kamera ajanı |
 | Albüm | `Latent/AlbumView.swift` (`AlbumView`) | UI |
 | Tek kare | `Latent/AlbumView.swift` (`PhotoDetailView`) | UI |
+| Ayarlar, Yardım, Gizlilik | `Latent/SettingsView.swift` | UI |
 | Ortak bileşenler | `Latent/DesignSystem.swift` | UI |
 
 ## Alınan kararlar
@@ -37,6 +38,26 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 
 ---
 
+## Geçici kararlar (Mert'le netleşecek)
+
+Mert cihazda test edemezken ilerleyebilmek için aşağıdakiler **iOS'un yerleşik kalıplarıyla, sade ve geri alınabilir** yapıldı. Nihai ekran tasarımı değildir; ekran sohbetinde her biri yeniden açılabilir.
+
+| Konu | Geçici çözüm | Nerede | Mert'e soru |
+|---|---|---|---|
+| Menü / Ayarlar | Arşivde marka satırının sağında `gearshape` → sheet içinde `Form`: Tarih damgası anahtarı, (izin reddedildiyse) Kamera iznini aç, Yardım, Gizlilik, Geri bildirim, Hakkında | `SettingsView.swift` | Menü bu kadar mı? Dişli ikonu yerinde mi, yoksa alt çubukta mı? |
+| Tarih damgası anahtarı | `@AppStorage("showDateStamp")`, varsayılan açık. Kapalıyken ekranda ve çerçeveli paylaşımda damga yok; **kenar tarihi her zaman kalır** | `DateStamp`, `framedExport(showStamp:)` | Anahtar Ayarlar'da mı, tek kare ekranında mı (paspartu ile birlikte)? |
+| Yardım | 7 soruluk SSS (rulo, 36 kare, zoom, silinen kare, saklama, orijinal paylaşım, kamera izni) | `HelpView` | Ton ve içerik |
+| Gizlilik | Uygulama içi metin; web URL'si sonra gelecek | `PrivacyView` | Metnin son hâli, URL |
+| Geri bildirim | "Rulo özetini paylaş" (`LibraryModel.feedbackSummaryURL()` → paylaşım sayfası) ve `mailto:` | `SettingsView` | Gerçek e-posta adresi (`LatentConfig.feedbackEmail`, şimdilik `latent.feedback@example.com`) |
+| Rulo yeniden adlandırma | Arşiv kapağında uzun bas → "Yeniden adlandır"; albümde rulo adına dokun. Her ikisi de TextField'lı alert, 60 karakter | `RenameRollAlert` | Ada dokunmak keşfedilebilir mi? Kalem ikonu gerekli mi? |
+| Rulo silme | Arşiv kapağında uzun bas → "Sil" → onay: "N fotoğraf kalıcı olarak silinecek" | `ArchiveView` | Albümden de silinebilsin mi? |
+| Kapak seçimi | Albüm karesinde uzun bas veya tek karede `…` menüsü → "Kapak yap"; mevcut kapak "Rulonun kapağı ✓" | `FrameMenuItems` | Arşivde kapağın değiştiği nasıl hissettirilsin? |
+| Kare silme | Albüm karesinde uzun bas veya tek karede `…` → "Sil" → onay: "Bu kare silinecek. Kare hakkı geri gelmez: kalan X kare." | `FrameMenuItems` | Bkz. aşağıdaki soru |
+| Tek aktif rulo | "Yeni rulo" (ve aktif rulo yokken kamera düğmesi) aktif rulo varsa önce onay: "London rulosu bitmedi (12/36). Yeni rulo başlatırsan London tamamlanır, kalan 24 kare kullanılamaz." Onaylanırsa yeni rulo sayfası `finishingActive: true` ile açılır; London ancak "Filmi tak" ile tamamlanır (sayfadan vazgeçmek London'ı bitirmez). Arşiv kamera düğmesi `library.activeRoll`'u açar | `ArchiveView`, `NewRollView` | Rulo bitirme anının tasarımı (Kamera §3 sorusu) |
+| Ölçüm sayaçları | Albüm görünümü başına bir kez `recordAlbumOpened`, paylaşım sayfası açıldığında `recordShare` (çerçeveli ve orijinal) | `AlbumView`, `PhotoDetailView` | — |
+
+**Silinen kare için açık soru:** Silinen kare albümde iz bırakmıyor; numaralar korunduğu için ızgarada atlama görünüyor (ör. 04 → 06). Bu yeterli mi, yoksa boşluğa "yanmış kare" gibi soluk bir yer tutucu mu konsun?
+
 ## 1. Arşiv
 
 ### Bugün
@@ -44,20 +65,21 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 - Yükleniyor / okunamadı (tekrar dene) / boş durumları var. Boş durum: kesikli çizgili alan, "İlk hikâyen burada başlayacak.", "İlk rulonu başlat".
 - Rulolar tek sütun, en yeni üstte. Her kapak: film çerçeveli **kapak karesi** (`roll.coverFrame`; kenarında film ▸ kare ▸ tarih) (kare yoksa gri alan + "İlk kareyi çek"), rulo adı, **oluşturma** tarihi, ok ikonu, alt satırda durum noktası (turuncu = devam, gri = tamam), `COLOR 400 · 35 mm FİLM` ve `07 / 36` sayaç.
 - Alt çubuk: "Arşiv · N RULO", ortada turuncu kamera düğmesi, sağda "Yeni rulo".
-- Kamera düğmesi listedeki **ilk** devam eden ruloyu açar (ilk = en son oluşturulan); yoksa yeni rulo sayfasını açar.
+- Sağ üstte Ayarlar (`gearshape`). Kapak kartında uzun bas: Yeniden adlandır, Sil (geçici, yukarıda).
+- Kamera düğmesi aktif ruloyu (`library.activeRoll`) açar; yoksa yeni rulo akışını başlatır. "Yeni rulo" aktif rulo varken önce bitirme onayı ister.
 
 ### PRD §7.1 ile farklar
 - ✅ Boş durum, kapak, siyah çerçeve + altın işaretler, ad/tarih/film/sayaç, devam/tamam durumu, kamera ve yeni rulo eylemleri.
-- ⚠️ Kapak her zaman ilk kare; seçilemiyor (PRD §16 açık soru).
+- ✅ Kapak seçilebiliyor (varsayılan ilk kare; albümde/tek karede "Kapak yap").
 - ⚠️ Tarih ruloyu oluşturma tarihi; gezinin tarih aralığı (ilk–son kare) değil.
 - ⚠️ Devam eden ve tamamlanan rulolar aynı listede; yalnızca 6 pt'lik nokta ve metinle ayrışıyor.
-- ⚠️ Aynı anda birden fazla devam eden rulo olabiliyor; kamera düğmesinin hangisini açacağı kullanıcıya görünmüyor.
-- ❌ Rulo silme ve ad değiştirme yok (depolama API'si bekleniyor, bkz. "Sonraki tur").
+- ✅ Tek aktif rulo (geçici akış, yukarıda).
+- ✅ Rulo silme ve ad değiştirme (geçici, bağlam menüsü).
 
 ### Açık sorular
 1. **Kapak seçimi:** Varsayılan ilk kare mi, son kare mi? Seçim nereden yapılır — albümde kareye uzun basma ("Kapak yap"), tek kare ekranında menü, yoksa albüm başlığındaki kapağa dokunup seçici mi?
 2. **Devam eden rulo öne çıksın mı?** Üstte ayrı, daha büyük bir "Şu an yüklü film" kartı + altta tamamlananlar arşivi gibi iki katmanlı bir düzen?
-3. **Birden fazla aktif rulo** serbest mi? Değilse yeni rulo başlatırken mevcut ruloyu bitirme/bırakma sorusu mu sorulur?
+3. ~~Birden fazla aktif rulo~~ → tek aktif rulo kararı alındı; onay metni ve anı tasarımı açık.
 4. Kapakta tarih: oluşturma tarihi mi, "12–18 Eki 2026" gibi aralık mı?
 5. `PHOTO SYSTEM / 01` kalsın mı, anlamlı bir bilgiye mi dönüşsün (ör. toplam kare)?
 6. Liste uzadığında (10+ rulo) yine tek sütun büyük kapak mı, yıl/ay başlıkları mı?
@@ -72,7 +94,8 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 
 ### PRD §6 / §9 ile farklar
 - ✅ Ad zorunlu, film bilgisi gösteriliyor, kamera hemen açılıyor.
-- ⚠️ 60 karakter sınırı UI'da görünmüyor; depolama katmanı sessizce kesiyor.
+- ✅ Ad alanı 60 karakterde duruyor (sayaç yok).
+- Aktif rulo bitirilerek açıldıysa altbilgi "Filmi taktığında London tamamlanır." der.
 - ⚠️ Görsel olarak tamamen standart iOS formu; ürünün film/kamera dili burada yok.
 
 ### Açık sorular
@@ -106,13 +129,14 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 - Başlık: `N KARE · 35 mm FİLM`, büyük rulo adı, film adı.
 - Kareler **iki sütun düzenli ızgara**; her karede kompakt film kenarı (`400 ▸ 07 ▸ 08.10.26`; köşe damgası yok, gerekçe yukarıda) ve altında tekrar kare numarası. Dikey/yatay kareler kendi oranını koruyor.
 - Altta "N BOŞ KARE" ya da "RULO TAMAMLANDI". Devam eden ruloda sağ üstte "Ruloyu bitir" (onay penceresi korunacak/kullanılamayacak kare sayısını söylüyor) ve altta deklanşör.
+- Rulo adına dokunmak yeniden adlandırır; karede uzun bas: Kapak yap, Sil (geçici).
 
 ### PRD §7.3 ile farklar
 - ✅ Oranlar korunuyor, film kenarı + numara, kalan kare sayısı, tamamlanan rulo kare kabul etmiyor.
 - ❌ "Düzenli fakat tamamen mekanik olmayan kontakt baskı ritmi" yok — şu an tamamen mekanik ızgara.
 - ⚠️ Dikey ve yatay kareler aynı sütun genişliğinde olduğu için yatay kareler çok küçük, satırlarda yükseklik boşlukları oluşuyor.
 - ⚠️ Kare numarası hem film kenarında hem altında; tekrar.
-- ❌ Kare silme, kapak seçimi, rulo adını değiştirme/silme yok.
+- ✅ Kare silme, kapak seçimi, rulo adını değiştirme (geçici). Rulo silme yalnızca arşivde.
 
 ### Açık sorular
 1. **Kontakt baskı ritmi:** Hangi "mekanik olmayan" yaklaşım?
@@ -132,18 +156,18 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 ### Bugün
 - Film çerçeveli geliştirilmiş fotoğraf (kenar `LATENT COLOR 400 ▸ 07 ▸ 08.10.26`, sağ altta `'26 10 08` damgası), altında rulo adı + tarih, sağda `COLOR 400 / 07 / 36` (`roll.film` ve `FilmRoll.capacity`'den).
 - Çerçeveli paylaşım çıktısı aynı kenar yazısını ve köşe damgasını taşır; orijinal paylaşım damgasızdır.
-- Sağ üstte paylaş menüsü: "Film çerçevesiyle paylaş" (uygulama içinde render) ve "Orijinali paylaş".
+- Sağ üstte paylaş menüsü: "Film çerçevesiyle paylaş" (uygulama içinde render) ve "Orijinali paylaş". Yanında `…` menüsü: Kapak yap, Sil (silince albüme döner).
 
 ### PRD §7.4 ile farklar
 - ✅ Büyük fotoğraf, film çerçevesi, film adı, rulo adı, tarih, kare numarası; iki paylaşım seçeneği.
 - ❌ **Paspartu göster/gizle seçeneği yok.**
 - ⚠️ Kareler arasında kaydırarak geçiş yok; her kare için albüme dönmek gerekiyor.
 - ✅ Çerçeveli dışa aktarım film adını ve çekim tarihini rulodan/kareden alıyor (`framedExport(…, film:, capturedAt:)`).
-- ❌ Kare silme / kapak yapma eylemi yok.
+- ✅ Kare silme / kapak yapma (geçici `…` menüsü).
 
 ### Açık sorular
 1. Paspartu: ekranda bir anahtar mı, fotoğrafa dokununca geçiş mi? Paylaşım çıktısı da bu seçimi mi izlesin?
-   - Tarih damgası da bu anahtara bağlansın mı (ör. "damgalı / temiz" gösterim ve paylaşım)? Şu an her zaman açık.
+   - Tarih damgası şimdilik Ayarlar'daki anahtarla kapatılıyor; paspartu ile aynı yere taşınsın mı?
 2. Sola/sağa kaydırma ile önceki/sonraki kareye geçiş eklensin mi?
 3. Tek kare ekranının arka planı: beyaz kâğıt mı, karanlık "ışık masası" mı?
 4. Kare bilgisi (çekim saati, yön) ne kadar detaylı gösterilsin?
@@ -157,11 +181,7 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 - **Dokunma alanı:** "Yeni rulo" en az 44 pt. Deklanşörler 58–82 pt.
 - Kamera ekranının erişilebilirliği Kamera ajanında.
 
-## Sonraki tur (depolama PR'ı birleşince)
+## Bağımlılıklar
 
-Depolama ajanı (`agent/storage`) `LibraryModel`'e rulo/kare silme, rulo adını değiştirme ve kapak seçimi API'leri ekliyor. O PR birleşince UI tarafında yapılacaklar — yukarıdaki açık sorulara Mert'le karar verildikten sonra:
-
-- [ ] Arşiv: rulo bağlam menüsü (ad değiştir, sil) + silme onayı.
-- [ ] Albüm/tek kare: kare silme akışı ve onayı.
-- [ ] Kapak seçimi UI'ı ve arşiv kapağının seçilen kareyi göstermesi.
-- [ ] Albüm başlığında ad düzenleme (60 karakter sınırı görünür).
+- Silme, ad değiştirme ve kapak API'leri `main`'de (`renameRoll`, `deleteRoll`, `deleteFrame(_:from:)`, `setCover(_:for:)`).
+- Depolama ajanından gelecek, bu dalda henüz derlenmeyen API'ler: `LibraryModel.activeRoll`, `createRoll(title:finishingActive:)`, `recordAlbumOpened(_:)`, `recordShare(_:)`, `feedbackSummaryURL()`. Koordinatör iki dalı entegrasyonda birleştirecek.
