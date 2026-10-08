@@ -27,7 +27,7 @@ struct AlbumView: View {
                             ForEach(roll.frames) { frame in
                                 NavigationLink { PhotoDetailView(rollID: rollID, frameID: frame.id) } label: {
                                     VStack(alignment: .leading, spacing: 8) {
-                                        FilmBorder(number: frame.number, compact: true, film: roll.film) {
+                                        FilmBorder(number: frame.number, compact: true, film: roll.film, date: frame.capturedAt) {
                                             StoredPhoto(url: library.url(frame), aspectRatio: frame.orientation.aspectRatio)
                                         }
                                         MicroLabel(text: String(format: "%02d", frame.number))
@@ -83,7 +83,9 @@ struct PhotoDetailView: View {
         ScrollView {
             if let frame, let roll {
                 VStack(alignment: .leading, spacing: 24) {
-                    FilmBorder(number: number, film: roll.film) { StoredPhoto(url: library.url(frame, variant: .developed), aspectRatio: frame.orientation.aspectRatio) }
+                    FilmBorder(number: number, film: roll.film, date: frame.capturedAt) {
+                        StoredPhoto(url: library.url(frame, variant: .developed), aspectRatio: frame.orientation.aspectRatio).dateStamp(frame.capturedAt)
+                    }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(LatentAccessibility.frame(rollTitle: roll.title, number: number, capturedAt: frame.capturedAt))
                         .accessibilityAddTraits(.isImage)
@@ -114,9 +116,10 @@ struct PhotoDetailView: View {
         guard let frame, let roll else { return }
         exporting = true
         let url = library.url(frame, variant: .developed); let title = roll.title; let index = number
+        let film = roll.film; let capturedAt = frame.capturedAt
         Task {
             do {
-                let result = try await Task.detached(priority: .userInitiated) { try PhotoProcessor.framedExport(imageURL: url, title: title, number: index) }.value
+                let result = try await Task.detached(priority: .userInitiated) { try PhotoProcessor.framedExport(imageURL: url, title: title, number: index, film: film, capturedAt: capturedAt) }.value
                 share = ShareItem(url: result)
             } catch { self.error = error.localizedDescription }
             exporting = false

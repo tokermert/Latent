@@ -67,7 +67,7 @@ struct ArchiveView: View {
     private func rollCover(_ roll: FilmRoll) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             if let cover = roll.coverFrame {
-                FilmBorder(number: cover.number, film: roll.film) { StoredPhoto(url: library.url(cover), aspectRatio: cover.orientation.aspectRatio) }
+                FilmBorder(number: cover.number, film: roll.film, date: cover.capturedAt) { StoredPhoto(url: library.url(cover), aspectRatio: cover.orientation.aspectRatio) }
             } else {
                 FilmBorder(number: 0, film: roll.film) {
                     Rectangle().fill(Color(white: 0.95)).aspectRatio(3.0 / 2.0, contentMode: .fit)
