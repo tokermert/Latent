@@ -23,14 +23,21 @@ final class CameraService: NSObject, @unchecked Sendable {
     private var configured = false
     private var delegates: [Int64: PhotoDelegate] = [:]
 
-    func start() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+    /// 12 MP class (4032 × 3024 ≈ 12.2 MP, with a small margin). 48 MP sensors also offer
+    /// 24/48 MP, but every frame is kept as three JPEG variants and decoded in memory for
+    /// cropping, so 12 MP is the default.
+    private static let targetPhotoPixels: Int64 = 12_600_000
+
+    /// Returns the capture device so the UI can build a rotation coordinator for it.
+    func start() async throws -> AVCaptureDevice {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AVCaptureDevice, Error>) in
             queue.async { [self] in
                 do {
                     if !configured { try configure() }
                     if !session.isRunning { session.startRunning() }
                     guard session.isRunning else { throw CameraFailure.notRunning }
-                    continuation.resume()
+                    guard let device = (session.inputs.first as? AVCaptureDeviceInput)?.device else { throw CameraFailure.configuration }
+                    continuation.resume(returning: device)
                 } catch { continuation.resume(throwing: error) }
             }
         }
@@ -58,9 +65,12 @@ final class CameraService: NSObject, @unchecked Sendable {
             session.removeOutput(output); session.removeInput(input); throw error
         }
         output.maxPhotoQualityPrioritization = .balanced
-        if let dimensions = device.activeFormat.supportedMaxPhotoDimensions.min(by: {
-            Int64($0.width) * Int64($0.height) < Int64($1.width) * Int64($1.height)
-        }) { output.maxPhotoDimensions = dimensions }
+        let pixels = { (d: CMVideoDimensions) in Int64(d.width) * Int64(d.height) }
+        let supported = device.activeFormat.supportedMaxPhotoDimensions.sorted { pixels($0) < pixels($1) }
+        // Largest size not above ~12 MP; if the format only offers bigger sizes, the smallest of them.
+        if let dimensions = supported.last(where: { pixels($0) <= Self.targetPhotoPixels }) ?? supported.first {
+            output.maxPhotoDimensions = dimensions
+        }
         configured = true
     }
 

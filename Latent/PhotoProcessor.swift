@@ -60,7 +60,7 @@ enum PhotoProcessor {
             (title as NSString).draw(in: CGRect(x: border, y: height - 110, width: width - border * 2, height: 58), withAttributes: titleStyle)
         }
         guard let data = image.jpegData(compressionQuality: 0.94) else { throw PhotoProcessingError.unreadableImage }
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("LatentShares", isDirectory: true)
+        let directory = ShareExports.directory()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("Latent-\(UUID().uuidString).jpg")
         try data.write(to: url, options: .atomic)

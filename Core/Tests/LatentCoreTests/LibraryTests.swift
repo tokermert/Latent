@@ -1,5 +1,7 @@
 import XCTest
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 @testable import LatentCore
 
 final class LibraryTests: XCTestCase {

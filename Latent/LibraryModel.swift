@@ -15,6 +15,8 @@ final class LibraryModel: ObservableObject {
 
     func load() async {
         guard !isLoaded else { return }
+        // Framed share images from earlier sessions are no longer referenced by any share sheet.
+        ShareExports.clear()
         do { rolls = try await repository.load(); isLoaded = true; errorMessage = nil }
         catch { errorMessage = error.localizedDescription }
     }
@@ -29,6 +31,16 @@ final class LibraryModel: ObservableObject {
     }
 
     func finish(_ rollID: UUID) async throws { rolls = try await repository.finish(rollID) }
+    func renameRoll(_ rollID: UUID, title: String) async throws { rolls = try await repository.renameRoll(rollID, title: title) }
+    func deleteRoll(_ rollID: UUID) async throws { rolls = try await repository.deleteRoll(rollID) }
+    /// The deleted frame's exposure stays used; `remaining` does not grow.
+    func deleteFrame(_ frameID: UUID, from rollID: UUID) async throws {
+        rolls = try await repository.deleteFrame(rollID: rollID, frameID: frameID)
+    }
+    /// Pass nil to fall back to the first frame.
+    func setCover(_ frameID: UUID?, for rollID: UUID) async throws {
+        rolls = try await repository.setCover(rollID, frameID: frameID)
+    }
     func roll(_ id: UUID) -> FilmRoll? { rolls.first { $0.id == id } }
     func url(_ frame: FilmFrame, variant: ImageVariant = .thumbnail) -> URL {
         repository.imageURL(frameID: frame.id, variant: variant)

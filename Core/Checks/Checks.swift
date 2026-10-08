@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
 import LatentCore
 
 // A dependency-free smoke suite for Macs with Command Line Tools but no XCTest.
@@ -77,6 +79,114 @@ struct Checks {
         try require(CropGeometry.rect(width: 3024, height: 4032, aspectRatio: 2.0 / 3.0) == CGRect(x: 168, y: 0, width: 2688, height: 4032), "Portrait crop mismatch")
         try require(CropGeometry.rect(width: 4032, height: 3024, aspectRatio: 1.5) == CGRect(x: 0, y: 168, width: 4032, height: 2688), "Landscape crop mismatch")
         print("PASS: centered 2:3 and 3:2 crop geometry")
-        print("7 core checks passed.")
+        try await storageChecks()
+        print("15 core checks passed.")
+    }
+
+    static func photoCount(_ directory: URL) throws -> Int {
+        try FileManager.default.contentsOfDirectory(atPath: directory.appendingPathComponent("Photos").path).count
+    }
+
+    static func storageChecks() async throws {
+        let files = CaptureFiles(original: Data([1, 2, 3]), developed: Data([4, 5]), thumbnail: Data([6]))
+        func fresh() throws -> URL {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("LatentSmoke-\(UUID())")
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return url
+        }
+
+        // Version 1 migration
+        let v1Dir = try fresh(); defer { try? FileManager.default.removeItem(at: v1Dir) }
+        let frameIDs = [UUID(), UUID(), UUID()]
+        let frameJSON = frameIDs.map { #"{"id":"\#($0.uuidString)","capturedAt":0,"orientation":"landscape"}"# }.joined(separator: ",")
+        let v1 = #"{"version":1,"rolls":[{"id":"\#(UUID().uuidString)","title":"London","createdAt":0,"film":"LATENT COLOR 400","frames":[\#(frameJSON)]}]}"#
+        try Data(v1.utf8).write(to: v1Dir.appendingPathComponent("library.json"))
+        let migrating = RollRepository(directory: v1Dir)
+        try FileManager.default.createDirectory(at: v1Dir.appendingPathComponent("Photos"), withIntermediateDirectories: true)
+        for id in frameIDs { for v in ImageVariant.allCases { try Data([1]).write(to: migrating.imageURL(frameID: id, variant: v)) } }
+        let migrated = try await migrating.load()
+        try require(migrated[0].frames.map(\.id) == frameIDs && migrated[0].frames.map(\.number) == [1, 2, 3], "v1 frames renumbered or lost")
+        try require(migrated[0].exposuresUsed == 3 && migrated[0].remaining == 33 && migrated[0].coverFrameID == nil, "v1 counters wrong")
+        try require(try photoCount(v1Dir) == 9, "Migration deleted referenced photos")
+        let appended = try await migrating.append(to: migrated[0].id, orientation: .portrait, files: files)
+        try require(appended[0].frames.last?.number == 4, "First v2 capture misnumbered")
+        let header = try JSONSerialization.jsonObject(with: Data(contentsOf: v1Dir.appendingPathComponent("library.json"))) as? [String: Any]
+        try require(header?["version"] as? Int == 2, "Commit did not write version 2")
+        let reread = try await RollRepository(directory: v1Dir).load()
+        try require(reread == appended, "Migrated library changed on reload")
+        print("PASS: version 1 manifest migrates without loss")
+
+        // Frame deletion keeps numbers and does not return the exposure
+        let dir = try fresh(); defer { try? FileManager.default.removeItem(at: dir) }
+        let repository = RollRepository(directory: dir); _ = try await repository.load()
+        let rollID = try await repository.createRoll(title: "Istanbul")[0].id
+        var roll = FilmRoll(title: "")
+        for _ in 0..<5 { roll = try await repository.append(to: rollID, orientation: .portrait, files: files)[0] }
+        let deleted = roll.frames[2] // frame 03
+        roll = try await repository.deleteFrame(rollID: rollID, frameID: deleted.id)[0]
+        try require(roll.frames.map(\.number) == [1, 2, 4, 5] && roll.remaining == 31, "Delete renumbered or freed a slot")
+        try require(try photoCount(dir) == 12, "Deleted frame files remain")
+        roll = try await repository.append(to: rollID, orientation: .portrait, files: files)[0]
+        try require(roll.frames.last?.number == 6, "Next capture reused a deleted number")
+        print("PASS: frame deletion keeps numbering and counter")
+
+        for _ in 0..<30 { roll = try await repository.append(to: rollID, orientation: .portrait, files: files)[0] }
+        try require(roll.isFinished && roll.frames.count == 35 && roll.frames.last?.number == 36, "36 exposure boundary wrong after delete")
+        do { _ = try await repository.append(to: rollID, orientation: .portrait, files: files); throw Failure.check("Deleted frame reopened the roll") }
+        catch LibraryError.finishedRoll { }
+        print("PASS: deleted frame never returns one of 36 exposures")
+
+        // Cover
+        roll = try await repository.setCover(rollID, frameID: roll.frames[3].id)[0]
+        let coverID = roll.frames[3].id
+        try require(roll.coverFrame?.id == coverID, "Cover not applied")
+        roll = try await repository.deleteFrame(rollID: rollID, frameID: coverID)[0]
+        try require(roll.coverFrameID == nil && roll.coverFrame?.id == roll.frames.first?.id, "Deleted cover not reset")
+        print("PASS: cover selection and fallback")
+
+        // Rename
+        roll = try await repository.renameRoll(rollID, title: "  " + String(repeating: "x", count: 70))[0]
+        try require(roll.title.count == 60 && !roll.title.hasPrefix(" "), "Rename not trimmed/limited")
+        do { _ = try await repository.renameRoll(rollID, title: " \n "); throw Failure.check("Empty rename accepted") }
+        catch LibraryError.emptyTitle { }
+        print("PASS: rename trims and limits title")
+
+        // Roll deletion
+        let other = try await repository.createRoll(title: "Other")[0].id
+        _ = try await repository.append(to: other, orientation: .landscape, files: files)
+        let remaining = try await repository.deleteRoll(rollID)
+        let photosLeft = try photoCount(dir)
+        try require(remaining.map(\.id) == [other] && photosLeft == 3, "Roll delete left files or removed others")
+        let reloaded = try await RollRepository(directory: dir).load()
+        try require(reloaded == remaining, "Roll delete not persisted")
+        print("PASS: roll deletion removes manifest entry and files")
+
+        // Orphans: removed after a good load, never after a bad one
+        let photos = dir.appendingPathComponent("Photos")
+        let orphan = "\(UUID().uuidString)-developed.jpg"
+        let foreign = ["notes.txt", "\(UUID().uuidString)-raw.jpg", "\(UUID().uuidString.lowercased())-original.jpg"]
+        for name in [orphan] + foreign { try Data([9]).write(to: photos.appendingPathComponent(name)) }
+        let manifest = dir.appendingPathComponent("library.json")
+        let good = try Data(contentsOf: manifest)
+        try Data("broken".utf8).write(to: manifest)
+        do { _ = try await RollRepository(directory: dir).load(); throw Failure.check("Broken manifest loaded") }
+        catch LibraryError.damagedLibrary { }
+        try require(try photoCount(dir) == 3 + 1 + foreign.count, "Files deleted while manifest was broken")
+        try FileManager.default.removeItem(at: manifest)
+        _ = try await RollRepository(directory: dir).load()
+        try require(try photoCount(dir) == 3 + 1 + foreign.count, "Files deleted while manifest was missing")
+        try good.write(to: manifest)
+        _ = try await RollRepository(directory: dir).load()
+        let names = Set(try FileManager.default.contentsOfDirectory(atPath: photos.path))
+        try require(!names.contains(orphan) && Set(foreign).isSubset(of: names) && names.count == 3 + foreign.count, "Orphan cleanup wrong")
+        print("PASS: orphan cleanup only after a readable manifest")
+
+        // Share exports
+        let tmp = try fresh(); defer { try? FileManager.default.removeItem(at: tmp) }
+        try FileManager.default.createDirectory(at: ShareExports.directory(in: tmp), withIntermediateDirectories: true)
+        try Data([1]).write(to: ShareExports.directory(in: tmp).appendingPathComponent("Latent-x.jpg"))
+        ShareExports.clear(in: tmp)
+        try require(!FileManager.default.fileExists(atPath: ShareExports.directory(in: tmp).path), "Share exports not cleared")
+        print("PASS: temporary share exports cleared")
     }
 }

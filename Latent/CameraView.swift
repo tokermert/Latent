@@ -10,9 +10,19 @@ final class CameraModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var permissionDenied = false
     @Published var pending: ProcessedCapture?
+    /// Rotation for the live preview connection, from the rotation coordinator.
+    @Published private(set) var previewAngle: CGFloat?
     let haptic = UIImpactFeedbackGenerator(style: .rigid)
     private var generation = 0
     private var observations: Set<AnyCancellable> = []
+    private var device: AVCaptureDevice?
+    private weak var previewLayer: AVCaptureVideoPreviewLayer?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservations: [NSKeyValueObservation] = []
+    /// Last horizon-level capture angle. The coordinator follows the physical (gravity)
+    /// orientation, so this is right even with portrait lock on. Only multiples of 90 are
+    /// accepted, so a face-up/face-down phone keeps the last valid value.
+    private var captureAngle: CGFloat = 90
 
     init() {
         for name in [AVCaptureSession.wasInterruptedNotification, AVCaptureSession.runtimeErrorNotification] {
@@ -21,7 +31,12 @@ final class CameraModel: ObservableObject {
             }.store(in: &observations)
         }
         NotificationCenter.default.publisher(for: AVCaptureSession.interruptionEndedNotification, object: service.session).sink { [weak self] _ in
-            Task { @MainActor in self?.ready = self?.service.session.isRunning ?? false }
+            Task { @MainActor in
+                guard let self else { return }
+                self.ready = self.service.session.isRunning
+                // Clear the interruption notice, but keep a pending save error visible.
+                if self.ready, self.pending == nil { self.errorMessage = nil }
+            }
         }.store(in: &observations)
     }
 
@@ -38,18 +53,76 @@ final class CameraModel: ObservableObject {
         guard authorized else { permissionDenied = true; errorMessage = CameraFailure.permission.localizedDescription; return }
         permissionDenied = false; errorMessage = nil
         do {
-            try await service.start()
+            let device = try await service.start()
             guard token == generation else { return }
+            if device !== self.device { self.device = device; makeRotationCoordinator() }
             ready = true; haptic.prepare()
         } catch { if token == generation { errorMessage = error.localizedDescription; ready = false } }
     }
 
     func stop() { generation += 1; ready = false; service.stop() }
 
-    func capture(rotation: CGFloat, orientation: FrameOrientation, library: LibraryModel, rollID: UUID) async {
+    func attach(previewLayer: AVCaptureVideoPreviewLayer) {
+        guard previewLayer !== self.previewLayer else { return }
+        self.previewLayer = previewLayer
+        makeRotationCoordinator()
+    }
+
+    /// Needs both the device and the on-screen preview layer. The layer normally lives as long
+    /// as the camera screen; if SwiftUI ever recreates it, the coordinator is rebuilt.
+    private func makeRotationCoordinator() {
+        rotationObservations = []
+        rotationCoordinator = nil
+        previewAngle = nil
+        guard let device, let previewLayer else { return }
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+        rotationCoordinator = coordinator
+        // AVFoundation delivers these KVO changes on the main queue.
+        rotationObservations = [
+            coordinator.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.initial, .new]) { [weak self] coordinator, _ in
+                let angle = coordinator.videoRotationAngleForHorizonLevelCapture
+                Task { @MainActor in
+                    guard let self, coordinator === self.rotationCoordinator, let angle = Self.quarterTurn(angle) else { return }
+                    self.captureAngle = angle
+                }
+            },
+            coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] coordinator, _ in
+                let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+                Task { @MainActor in
+                    guard let self, coordinator === self.rotationCoordinator, let angle = Self.quarterTurn(angle) else { return }
+                    self.previewAngle = angle
+                }
+            }
+        ]
+    }
+
+    /// Normalizes to 0/90/180/270; anything else is ignored.
+    nonisolated private static func quarterTurn(_ angle: CGFloat) -> CGFloat? {
+        guard angle.isFinite else { return nil }
+        let turns = (angle / 90).rounded()
+        guard abs(angle - turns * 90) < 1 else { return nil }
+        return CGFloat((Int(turns) % 4 + 4) % 4) * 90
+    }
+
+    /// Crop ratio of the saved photo. A quarter turn swaps the sensor's native axes, so
+    /// the result follows the device orientation rather than the interface layout.
+    private func frameOrientation(for angle: CGFloat) -> FrameOrientation {
+        var sensorIsLandscape = true
+        if let device {
+            let native = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+            sensorIsLandscape = native.width >= native.height
+        }
+        let quarterTurned = angle == 90 || angle == 270
+        return sensorIsLandscape != quarterTurned ? .landscape : .portrait
+    }
+
+    func capture(library: LibraryModel, rollID: UUID) async {
         guard ready, !capturing, pending == nil else { return }
         capturing = true; errorMessage = nil
         haptic.impactOccurred(intensity: 0.85)
+        // Read at the moment of the press so turning the phone afterwards does not matter.
+        let rotation = captureAngle
+        let orientation = frameOrientation(for: rotation)
         do {
             let data = try await service.capture(rotation: rotation)
             pending = try await Task.detached(priority: .userInitiated) {
@@ -80,32 +153,36 @@ struct CameraView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var camera = CameraModel()
-    @State private var rotation: CGFloat = 90
     private var roll: FilmRoll? { library.roll(rollID) }
     private var busy: Bool { camera.capturing || camera.pending != nil }
 
     var body: some View {
         GeometryReader { geometry in
             let landscape = geometry.size.width > geometry.size.height
+            // Viewfinder shape on screen. The sensor's long side always runs along the phone's
+            // long side, so a 2:3 box in a portrait UI also matches a 3:2 photo taken with
+            // portrait lock on. The saved ratio itself comes from CameraModel's capture angle.
             let orientation: FrameOrientation = landscape ? .landscape : .portrait
             VStack(spacing: 16) {
                 HStack {
                     Button { dismiss() } label: { Label(roll?.title ?? "Arşiv", systemImage: "chevron.left").font(.headline) }
                         .disabled(busy)
                     Spacer()
-                    MicroLabel(text: String(format: "%02d / 36", roll?.frames.count ?? 0))
+                    MicroLabel(text: roll?.counterText ?? "")
                 }.padding(.horizontal, 24)
-                if landscape {
-                    HStack(spacing: 30) {
-                        viewfinder(orientation: orientation).frame(maxWidth: .infinity)
-                        controls(orientation: orientation).frame(width: 120)
-                    }.padding(.horizontal, 24)
-                } else {
-                    viewfinder(orientation: orientation).frame(maxHeight: max(140, geometry.size.height - 245))
-                        .padding(.horizontal, 24)
-                    HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: "COLOR 400") }.padding(.horizontal, 28)
-                    controls(orientation: orientation)
-                }
+                // One hierarchy for both layouts: switching branches would recreate the preview
+                // view, its layer (a new session connection) and the rotation coordinator on
+                // every turn, which stalls the main thread mid-rotation.
+                let layout = landscape ? AnyLayout(HStackLayout(spacing: 30)) : AnyLayout(VStackLayout(spacing: 16))
+                layout {
+                    viewfinder(orientation: orientation)
+                        .frame(maxWidth: landscape ? .infinity : nil, maxHeight: landscape ? nil : max(140, geometry.size.height - 245))
+                        .padding(.horizontal, landscape ? 0 : 24)
+                    if !landscape {
+                        HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: roll?.filmShortName ?? "") }.padding(.horizontal, 28)
+                    }
+                    controls().frame(width: landscape ? 120 : nil)
+                }.padding(.horizontal, landscape ? 24 : 0)
                 if let message = camera.errorMessage {
                     Text(message).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
                     if camera.pending != nil {
@@ -131,19 +208,19 @@ struct CameraView: View {
             // The *inside* of the frame, rather than the frame including its border,
             // must have the same aspect ratio as the saved crop.
             let width = max(1, min(geometry.size.width - 37, (geometry.size.height - 39) * orientation.aspectRatio))
-            FilmBorder(number: min(36, (roll?.frames.count ?? 0) + 1)) {
-                CameraPreview(session: camera.service.session) { rotation = $0 }
+            FilmBorder(number: min(FilmRoll.capacity, roll?.nextFrameNumber ?? 1), film: roll?.film ?? "LATENT COLOR 400") {
+                CameraPreview(session: camera.service.session, rotationAngle: camera.previewAngle) { camera.attach(previewLayer: $0) }
                     .frame(width: width, height: width / orientation.aspectRatio)
                     .overlay { if !camera.ready { Color.black.opacity(0.4); if camera.errorMessage == nil { ProgressView().tint(.white) } } }
             }.frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
 
-    private func controls(orientation: FrameOrientation) -> some View {
+    private func controls() -> some View {
         VStack(spacing: 15) {
             Circle().fill(LatentTheme.orange).frame(width: 6, height: 6).accessibilityHidden(true)
             Button {
-                Task { await camera.capture(rotation: rotation, orientation: orientation, library: library, rollID: rollID) }
+                Task { await camera.capture(library: library, rollID: rollID) }
             } label: { if camera.capturing { ProgressView().tint(.black) } else { Color.clear } }
                 .buttonStyle(TactileShutterStyle())
                 .disabled(!camera.ready || busy || (roll?.isFinished ?? true))
@@ -153,7 +230,7 @@ struct CameraView: View {
             else if let last = roll?.frames.last {
                 HStack(spacing: 8) {
                     StoredPhoto(url: library.url(last), aspectRatio: last.orientation.aspectRatio).frame(width: 24, height: 30).clipped()
-                    MicroLabel(text: "\(roll?.frames.count ?? 0). KARE KAYDEDİLDİ")
+                    MicroLabel(text: "\(last.number). KARE KAYDEDİLDİ")
                 }.accessibilityElement(children: .combine)
             }
         }
