@@ -90,7 +90,7 @@ struct SettingsView: View {
         preparingSummary = true
         Task {
             do {
-                let url = try await library.feedbackSummaryURL()
+                let url = try library.feedbackSummaryURL()
                 share = ShareItem(url: url)
             }
             catch { self.error = error.localizedDescription }
