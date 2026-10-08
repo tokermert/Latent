@@ -52,7 +52,7 @@ enum PhotoProcessor {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    static func framedExport(imageURL: URL, title: String, number: Int) throws -> URL {
+    static func framedExport(imageURL: URL, title: String, number: Int, film: String, capturedAt: Date, showStamp: Bool) throws -> URL {
         guard let input = UIImage(contentsOfFile: imageURL.path) else { throw PhotoProcessingError.unreadableImage }
         let width: CGFloat = 1800
         let border: CGFloat = 140
@@ -65,12 +65,25 @@ enum PhotoProcessor {
             UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             let filmRect = CGRect(x: border, y: 110, width: width - border * 2, height: photoHeight + 90)
             UIColor(red: 0.07, green: 0.08, blue: 0.06, alpha: 1).setFill(); context.fill(filmRect)
-            input.draw(in: CGRect(x: border + filmSide, y: 135, width: photoWidth, height: photoHeight))
+            let photoRect = CGRect(x: border + filmSide, y: 135, width: photoWidth, height: photoHeight)
+            input.draw(in: photoRect)
+            // Köşe tarih damgası: ekrandaki `DateStamp` ile aynı oran, renk ve hafif ışıma.
+            if showStamp {
+                let stampSize = max(photoWidth, photoHeight) * FilmImprint.stampScale
+                let stampStyle: [NSAttributedString.Key: Any] = [.font: UIFont.monospacedSystemFont(ofSize: stampSize, weight: .semibold), .foregroundColor: FilmImprint.stampUIColor]
+                let stamp = FilmImprint.stamp(capturedAt) as NSString
+                let stampBounds = stamp.size(withAttributes: stampStyle)
+                context.cgContext.saveGState()
+                context.cgContext.clip(to: photoRect)
+                context.cgContext.setShadow(offset: .zero, blur: stampSize * 0.6, color: FilmImprint.stampUIColor.withAlphaComponent(0.7).cgColor)
+                stamp.draw(at: CGPoint(x: photoRect.maxX - stampSize * 1.1 - stampBounds.width, y: photoRect.maxY - stampSize * 0.8 - stampBounds.height), withAttributes: stampStyle)
+                context.cgContext.restoreGState()
+            }
             let gold = UIColor(red: 0.85, green: 0.74, blue: 0.49, alpha: 1)
             gold.setFill()
             for tick in 0..<12 { context.fill(CGRect(x: width - border - 24, y: 170 + CGFloat(tick) * 24, width: 13, height: 13)) }
             let edgeStyle: [NSAttributedString.Key: Any] = [.font: UIFont.monospacedSystemFont(ofSize: 18, weight: .regular), .foregroundColor: gold]
-            (String(format: "LATENT COLOR 400 · %02d ▷", number) as NSString).draw(at: CGPoint(x: border + filmSide, y: photoHeight + 155), withAttributes: edgeStyle)
+            (FilmImprint.edge(film: film, number: number, date: capturedAt, compact: false) as NSString).draw(at: CGPoint(x: border + filmSide, y: photoHeight + 155), withAttributes: edgeStyle)
             let titleStyle: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 40, weight: .medium), .foregroundColor: UIColor.black]
             (title as NSString).draw(in: CGRect(x: border, y: height - 110, width: width - border * 2, height: 58), withAttributes: titleStyle)
         }

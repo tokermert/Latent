@@ -258,9 +258,10 @@ struct CameraView: View {
             // The *inside* of the frame, rather than the frame including its border,
             // must have the same aspect ratio as the saved crop.
             let width = max(1, min(geometry.size.width - 37, (geometry.size.height - 39) * orientation.aspectRatio))
-            FilmBorder(number: min(FilmRoll.capacity, roll?.nextFrameNumber ?? 1), film: roll?.film ?? "LATENT COLOR 400") {
+            FilmBorder(number: min(FilmRoll.capacity, roll?.nextFrameNumber ?? 1), film: roll?.film ?? "LATENT COLOR 400", date: Date()) {
                 CameraPreview(session: camera.service.session, rotationAngle: camera.previewAngle) { camera.attach(previewLayer: $0) }
                     .frame(width: width, height: width / orientation.aspectRatio)
+                    .dateStamp(Date())
                     .overlay { if !camera.ready { Color.black.opacity(0.4); if camera.errorMessage == nil { ProgressView().tint(.white) } } }
             }.frame(width: geometry.size.width, height: geometry.size.height)
         }
