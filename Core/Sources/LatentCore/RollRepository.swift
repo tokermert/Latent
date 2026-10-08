@@ -63,9 +63,10 @@ public actor RollRepository {
             if decoded.version == 1 { Self.migrateFromVersion1(&decoded) }
             try Self.validate(&decoded)
             snapshot = decoded
+            // Only after an existing manifest was read successfully: a missing or unreadable
+            // manifest must never cost photographs.
+            removeOrphanedFiles(keeping: decoded.rolls)
         } else { snapshot = Snapshot() }
-        // Only after the manifest was read successfully: an unreadable manifest must never cost photographs.
-        removeOrphanedFiles(keeping: snapshot!.rolls)
         return snapshot!.rolls
     }
 
