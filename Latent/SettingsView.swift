@@ -25,7 +25,6 @@ struct SettingsView: View {
     @AppStorage(FilmImprint.showStampKey) private var showDateStamp = true
     @State private var cameraDenied = SettingsView.isCameraDenied
     @State private var share: ShareItem?
-    @State private var preparingSummary = false
     @State private var error: String?
 
     var body: some View {
@@ -46,13 +45,8 @@ struct SettingsView: View {
                     NavigationLink { PrivacyView() } label: { Label("Gizlilik", systemImage: "hand.raised") }
                 }
                 Section {
-                    Button { shareSummary() } label: {
-                        HStack {
-                            Label("Rulo özetini paylaş", systemImage: "square.and.arrow.up")
-                            Spacer()
-                            if preparingSummary { ProgressView() }
-                        }
-                    }.disabled(preparingSummary || !library.isLoaded)
+                    Button { shareSummary() } label: { Label("Rulo özetini paylaş", systemImage: "square.and.arrow.up") }
+                        .disabled(!library.isLoaded)
                     if let mail = LatentConfig.feedbackMailURL {
                         Link(destination: mail) { Label("E-posta gönder", systemImage: "envelope") }
                     }
@@ -87,15 +81,11 @@ struct SettingsView: View {
     }
 
     private func shareSummary() {
-        preparingSummary = true
-        Task {
-            do {
-                let url = try library.feedbackSummaryURL()
-                share = ShareItem(url: url)
-            }
-            catch { self.error = error.localizedDescription }
-            preparingSummary = false
+        do {
+            let url = try library.feedbackSummaryURL()
+            share = ShareItem(url: url)
         }
+        catch { self.error = error.localizedDescription }
     }
 }
 
