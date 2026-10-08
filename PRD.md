@@ -1,8 +1,8 @@
 # Latent — Ürün Gereksinimleri Dokümanı
 
-**Sürüm:** 0.1 MVP  
+**Sürüm:** 0.2 MVP  
 **Tarih:** 8 Ekim 2026  
-**Durum:** Tasarım yönü seçildi, ilk SwiftUI/AVFoundation prototipi hazır; gerçek cihaz doğrulaması bekliyor.  
+**Durum:** Tasarım yönü seçildi, ilk SwiftUI/AVFoundation prototipi hazır; gerçek cihaz doğrulaması bekliyor. v0.2: rulo/kare yaşam döngüsü kararları, saklama ve yön netleştirmeleri (bkz. §17).  
 **Platform:** iOS 17+  
 **Ürün tipi:** Kamera + kişisel fotoğraf albümü
 
@@ -64,6 +64,8 @@ MVP’de profesyonel fotoğrafçılar, sosyal ağ yaratıcıları ve topluluk y�
 - Tek fotoğraf ekranı.
 - Film çerçeveli veya orijinal fotoğrafı sistem paylaşım ekranına gönderme.
 - Ruloyu 36 kare dolmadan bitirme; çekilmiş kareleri koruma.
+- Rulo adını değiştirme, rulo silme ve tek kare silme.
+- Rulo kapak karesini seçme.
 - Kamera izni, kamera hatası, oturum kesintisi ve kayıt hatası durumları.
 
 ### MVP dışında
@@ -86,7 +88,7 @@ MVP’de profesyonel fotoğrafçılar, sosyal ağ yaratıcıları ve topluluk y�
 1. Kullanıcı Latent’i açar.
 2. Arşiv boşsa “İlk rulonu başlat” çağrısını görür.
 3. Ruloya isim verir; örneğin `London`.
-4. Film bilgisi gösterilir: `Latent Color 400 · 36 kare · 35 mm`.
+4. Film bilgisi gösterilir: `Latent Color 400 · 36 kare · 35 mm film`.
 5. Kamera izni istenir ve kamera ekranı açılır.
 
 ### Gezi sırasında çekim
@@ -172,17 +174,27 @@ Seçilen yön modern konsepttir:
 ### Rulo
 
 - Sistem aynı anda birden fazla rulo saklayabilmeli.
+- Aynı anda yalnızca **tek aktif rulo** olabilir. Aktif rulo varken yeni rulo başlatmak, açık rulonun bitirilmesi onayını gösterir.
 - Bir rulo en fazla 36 kare içermeli.
 - Rulo adı boş bırakılamamalı; en fazla 60 karakter olmalı.
 - Rulo kapatıldığında çekilmiş kareler korunmalı.
-- Kapatılan rulo yeniden açılabilmeli fakat yeni kare kabul etmemeli.
+- Kapatılan rulo görüntülenebilmeli fakat yeni kare kabul etmemeli; çekime yeniden açılamaz.
+- Rulo adı değiştirilebilir (aynı kurallar).
+- Rulo silinebilir; onay gerektirir ve tüm kare dosyalarını siler.
+- Tek kare silinebilir. **Silinen kare 36'lık hakkı geri vermez**; kalan karelerin numaraları çekim sırasını korur (05 silinirse 04'ten sonra 06 gelir).
+- Kapak varsayılan olarak ilk karedir; kullanıcı başka bir kareyi kapak seçebilir. Kapak silinirse varsayılana döner.
 
 ### Fotoğraf saklama
 
 - Orijinal JPEG korunmalı.
 - Geliştirilmiş/kırpılmış JPEG saklanmalı.
 - Albüm için küçük önizleme saklanmalı.
-- Veriler `Application Support/Latent/` altında tutulmalı.
+- Veriler `Application Support/Latent/` altında tutulmalı. Bu klasör iCloud cihaz yedeğine dahildir; MVP'de bilinçli olarak dahil bırakılır.
+- Kayıt çözünürlüğü ~12 MP sınıfıdır; 48 MP sensörlerde de 12 MP kullanılır (bellek, işleme süresi ve 3 varyant depolama).
+- Orijinal varyant kameradan alınan JPEG'dir (HEIC değil).
+- Manifest sürümlüdür; eski sürüm manifestler kayıpsız taşınmalıdır.
+- Açılışta manifestte karşılığı olmayan fotoğraf dosyaları temizlenir; manifest okunamıyorsa hiçbir dosya silinmez.
+- Paylaşım için üretilen geçici dosyalar açılışta temizlenir.
 - Manifest atomik yazılmalı.
 - Fotoğraf dosyaları yazılamazsa sayaç artmamalı.
 - Bozuk manifest otomatik olarak boş arşivle değiştirilmemeli.
@@ -190,6 +202,7 @@ Seçilen yön modern konsepttir:
 ### Fotoğraf işleme
 
 - EXIF yönü normalize edilmeli.
+- Kayıt yönü ve kadraj oranı, arayüz yönünden değil **cihazın fiziksel yönünden** belirlenir; portre kilidi açıkken yatay çekim de 3:2 kaydedilir.
 - Dikey çekim 2:3, yatay çekim 3:2 merkez kırpılmalı.
 - İlk görünümde hafif doygunluk, kontrast ve parlaklık ayarı uygulanmalı.
 - Canlı kamera önizlemesi ilk MVP’de filtresiz olabilir; kayıtlı çıktı işlenmiş olmalı.
@@ -204,7 +217,7 @@ Seçilen yön modern konsepttir:
 ## 10. Teknik yaklaşım
 
 - **UI:** SwiftUI.
-- **Kamera:** AVFoundation / `AVCaptureSession` / `AVCapturePhotoOutput`.
+- **Kamera:** AVFoundation / `AVCaptureSession` / `AVCapturePhotoOutput`; yön için `AVCaptureDevice.RotationCoordinator`.
 - **Haptic:** `UIImpactFeedbackGenerator` ile rigid impact; düğmeye basıldığı anda tetiklenir.
 - **Görüntü işleme:** UIKit + Core Image.
 - **Saklama:** JSON manifest + yerel JPEG dosyaları.
@@ -212,7 +225,7 @@ Seçilen yön modern konsepttir:
 - **İzin:** `NSCameraUsageDescription` mevcut.
 - **Mimari sınır:** Kamera oturumu ayrı servis; rulo saklama actor tabanlı repository; ekranlar SwiftUI model katmanına bağlanır.
 
-Mevcut kaynaklar [Latent.xcodeproj](/Users/merttoker/Documents/Codex/2026-09-14/sel/outputs/Latent/Latent.xcodeproj) altında bulunmaktadır. Kurulum ve cihaz kabul notları [README.md](/Users/merttoker/Documents/Codex/2026-09-14/sel/outputs/Latent/README.md) dosyasındadır.
+Kaynaklar bu repodadır: uygulama `Latent.xcodeproj` / `Latent/`, çekirdek model ve saklama `Core/`. Kurulum ve cihaz kabul notları [README.md](README.md) dosyasındadır.
 
 ## 11. MVP kabul kriterleri
 
@@ -228,6 +241,9 @@ MVP tamamlanmış sayılırsa:
 - [ ] Bir fotoğraf üç yerel dosya varyantıyla kaydedilir.
 - [ ] Uygulama kapanıp açıldığında rulo ve fotoğraflar korunur.
 - [ ] 36. kareden sonra 37. kare kabul edilmez.
+- [ ] Kare silmek kalan kare hakkını artırmaz; numaralar korunur.
+- [ ] Portre kilidi açıkken yatay çekim 3:2 ve doğru yönde kaydedilir.
+- [ ] 0.1 manifestiyle oluşturulmuş arşiv güncel sürümde kayıpsız açılır.
 - [ ] Rulo erken bitirildiğinde mevcut kareler silinmez.
 - [ ] Arşiv, albüm ve tek kare görünümleri çalışır.
 - [ ] Çerçeveli çıktı ve orijinal çıktı paylaşılabilir.
@@ -247,6 +263,41 @@ MVP tamamlanmış sayılırsa:
 
 İlk aşamada sosyal takipçi, beğeni ve günlük aktif kullanıcı sayısı ana başarı ölçütü değildir.
 
+### Ölçüm yöntemi: TestFlight beta (karar verildi)
+
+MVP'de analytics SDK ve sunucu yoktur. Ölçüm, kapalı bir TestFlight betası üzerinden yapılır.
+
+**Katılımcılar:** 10–20 kişi; önümüzdeki 4–6 hafta içinde en az bir gezi veya şehir yürüyüşü planı olan, §3'teki profile uyan iPhone kullanıcıları.
+
+**Akış:**
+1. Kurulum sonrası 10 dk karşılama görüşmesi: beklenti ve şu anki gezi fotoğrafı alışkanlığı.
+2. Kullanıcı Latent'i gerçek bir gezide serbestçe kullanır; yönlendirme yapılmaz.
+3. Gezi bitiminden 2–3 gün sonra 20 dk görüşme: albüm birlikte açılır, sesli düşünme.
+4. 2 hafta sonra kısa takip: albüme geri dönüldü mü, ikinci rulo başladı mı?
+
+**Veri kaynakları:**
+- **Rulo özeti (uygulama içi, isteğe bağlı):** Albüm ekranında "Geri bildirim için rulo özetini paylaş" seçeneği, sistem paylaşım paneliyle küçük bir JSON metni gönderir. İçerik yalnızca sayısal ve zamansal veridir: rulo sayısı, rulo başına kare sayısı, kare zaman damgaları, yön dağılımı, bitirme şekli (36 / erken), silinen kare sayısı, paylaşım eylemi sayısı, albüm açılma sayısı. **Fotoğraf, rulo adı ve konum içermez.** Otomatik gönderim yoktur.
+- **TestFlight:** Çökme raporları ve ekran görüntülü geri bildirim.
+- **Görüşmeler:** Nitel sinyaller (kamera hissi, kısıtlayıcı kadraj, albümün geri dönülebilirliği).
+
+**Sinyal → kaynak eşleşmesi:**
+
+| Sinyal | Kaynak |
+|---|---|
+| İlk rulo + ilk kare | Rulo özeti, karşılama sonrası kontrol |
+| 2. ve 5. kareye ulaşma | Rulo özeti (zaman damgaları) |
+| En az 6 kareyle bitirme | Rulo özeti (bitirme şekli) |
+| Albümü tekrar açma | Rulo özeti (albüm açılma sayısı) + takip görüşmesi |
+| Paylaşım | Rulo özeti (paylaşım eylemi sayısı) |
+| İkinci rulo | Rulo özeti + 2 hafta takip |
+| Nitel his | Görüşmeler |
+
+**Başarı eşiği (ilk beta için öneri):** Katılımcıların ≥%60'ı bir ruloyu ≥6 kareyle bitirir, ≥%40'ı albüme gezi sonrası en az bir kez geri döner, ≥%25'i kendiliğinden ikinci rulo başlatır.
+
+**Gizlilik:** Uygulama veri toplamadığı için `PrivacyInfo.xcprivacy` değişmez; rulo özeti kullanıcının elle paylaştığı bir dosyadır. Katılımcılara özetin içeriği önceden gösterilir.
+
+**Ön koşullar:** Apple Developer Program üyeliği, benzersiz bundle identifier (`com.example.Latent` yerine), App Store Connect kaydı, app icon, TestFlight beta açıklaması ve harici test için Beta App Review.
+
 ## 13. Riskler ve kararlar
 
 ### Beklemek yerine anında görme
@@ -263,11 +314,11 @@ Kodak veya Fujifilm benzetimleri ileride ücretli paket fikrine dönüşebilir. 
 
 ### Yerel saklama
 
-İlk sürümde kullanıcı hesabı olmadığı için cihaz kaybında arşiv geri getirilemez. Bulut senkronizasyonu ürün doğrulamasından sonra ele alınmalıdır.
+İlk sürümde kullanıcı hesabı yoktur. Arşiv iCloud cihaz yedeğine dahil olduğundan yedekten geri yüklenebilir; yedeği kapalı kullanıcıda cihaz kaybında arşiv kaybolur. Bulut senkronizasyonu ürün doğrulamasından sonra ele alınmalıdır.
 
 ### Dosya bütünlüğü
 
-Fotoğraf varlıkları ve manifest ayrı dosyalarda tutulduğu için süreç ani sonlandığında sahipsiz dosyalar oluşabilir. Bu durum mevcut fotoğrafları koruyacak şekilde ele alınır; sonraki fazda açılışta orphan asset temizliği eklenebilir.
+Fotoğraf varlıkları ve manifest ayrı dosyalarda tutulduğu için süreç ani sonlandığında sahipsiz dosyalar oluşabilir. Bu durum mevcut fotoğrafları koruyacak şekilde ele alınır; v0.2 itibarıyla açılışta orphan asset temizliği MVP kapsamındadır (§9).
 
 ## 14. Sonraki fazlar
 
@@ -314,10 +365,15 @@ Fotoğraf varlıkları ve manifest ayrı dosyalarda tutulduğu için süreç ani
 
 ## 16. Açık sorular
 
-- Fotoğraf çekildikten sonra önizleme her zaman açık mı kalacak, yoksa banyo modu ayrı bir rulo seçeneği mi olacak?
-- Rulo kapağı otomatik ilk kare mi olacak, yoksa kullanıcı kapak karesini seçebilecek mi?
+- ~~Fotoğraf çekildikten sonra önizleme her zaman açık mı kalacak?~~ → MVP'de açık; banyo modu Faz 2'de ayrı rulo seçeneği olarak denenir.
+- ~~Rulo kapağı otomatik ilk kare mi olacak?~~ → Varsayılan ilk kare, kullanıcı değiştirebilir (§9).
 - Rulo tamamlanınca ikinci rulo önerisi nasıl gösterilecek?
 - Gerçek film markaları kullanılacaksa lisans ve isimlendirme yaklaşımı ne olacak?
 - Yerel arşivin yedeklenmesi için iCloud/CloudKit hangi doğrulama sinyalinden sonra eklenecek?
-- App Store ilk sürümünde yalnızca iPhone mu desteklenecek?
+- ~~App Store ilk sürümünde yalnızca iPhone mu desteklenecek?~~ → Evet, yalnızca iPhone.
+- ~~MVP başarı sinyalleri hangi yöntemle ölçülecek?~~ → TestFlight betası + isteğe bağlı rulo özeti + görüşmeler (§12).
 
+## 17. Değişiklik geçmişi
+
+- **0.2 (8 Ekim 2026):** Tek aktif rulo kuralı; rulo adı değiştirme, rulo/kare silme (silme kare hakkı iade etmez), kapak seçimi; ~12 MP kayıt, JPEG orijinal, iCloud yedeği notu; cihaz yönünden kayıt (`RotationCoordinator`); orphan ve geçici dosya temizliği MVP'ye alındı; manifest sürümleme; "35 mm film" ifadesi; ölçüm yöntemi TestFlight betası olarak belirlendi; açık soruların bir kısmı yanıtlandı.
+- **0.1 (8 Ekim 2026):** İlk MVP tanımı.
