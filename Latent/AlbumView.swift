@@ -70,7 +70,7 @@ struct AlbumView: View {
             // Ölçüm: albüm görünümü başına bir kez; detaydan geri dönüş tekrar saymaz.
             guard !recordedOpen else { return }
             recordedOpen = true
-            try? await library.recordAlbumOpened(rollID)
+            await library.recordAlbumOpened(rollID)
         }
         .fullScreenCover(isPresented: $camera) { CameraView(rollID: rollID) }
         .confirmationDialog("Ruloyu bitir?", isPresented: $confirmFinish, titleVisibility: .visible) {
@@ -178,7 +178,7 @@ struct PhotoDetailView: View {
     /// Paylaşım sayfasını açar ve paylaşımı sayar (çerçeveli ve orijinal için aynı sayaç).
     private func present(_ url: URL) {
         share = ShareItem(url: url)
-        Task { try? await library.recordShare(rollID) }
+        Task { await library.recordShare(rollID) }
     }
     private func export() {
         guard let frame, let roll else { return }

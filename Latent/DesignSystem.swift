@@ -199,7 +199,11 @@ struct StoredPhoto: View {
         .task(id: url) {
             image = nil; failed = false
             let path = url.path
-            let loaded = await Task.detached(priority: .userInitiated) { UIImage(contentsOfFile: path) }.value
+            // JPEG çözümü de arka planda yapılır; aksi hâlde ilk çizimde ana thread'de olur (12 MP'de takılma).
+            let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let image = UIImage(contentsOfFile: path) else { return nil }
+                return image.preparingForDisplay() ?? image
+            }.value
             guard !Task.isCancelled else { return }
             image = loaded; failed = loaded == nil
         }
