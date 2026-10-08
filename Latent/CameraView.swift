@@ -168,7 +168,7 @@ struct CameraView: View {
                     Button { dismiss() } label: { Label(roll?.title ?? "Arşiv", systemImage: "chevron.left").font(.headline) }
                         .disabled(busy)
                     Spacer()
-                    MicroLabel(text: String(format: "%02d / 36", roll?.frames.count ?? 0))
+                    MicroLabel(text: roll?.counterText ?? "")
                 }.padding(.horizontal, 24)
                 if landscape {
                     HStack(spacing: 30) {
@@ -178,7 +178,7 @@ struct CameraView: View {
                 } else {
                     viewfinder(orientation: orientation).frame(maxHeight: max(140, geometry.size.height - 245))
                         .padding(.horizontal, 24)
-                    HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: "COLOR 400") }.padding(.horizontal, 28)
+                    HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: roll?.filmShortName ?? "") }.padding(.horizontal, 28)
                     controls()
                 }
                 if let message = camera.errorMessage {
@@ -206,7 +206,7 @@ struct CameraView: View {
             // The *inside* of the frame, rather than the frame including its border,
             // must have the same aspect ratio as the saved crop.
             let width = max(1, min(geometry.size.width - 37, (geometry.size.height - 39) * orientation.aspectRatio))
-            FilmBorder(number: min(36, (roll?.frames.count ?? 0) + 1)) {
+            FilmBorder(number: min(FilmRoll.capacity, roll?.nextFrameNumber ?? 1), film: roll?.film ?? "LATENT COLOR 400") {
                 CameraPreview(session: camera.service.session, rotationAngle: camera.previewAngle) { camera.attach(previewLayer: $0) }
                     .frame(width: width, height: width / orientation.aspectRatio)
                     .overlay { if !camera.ready { Color.black.opacity(0.4); if camera.errorMessage == nil { ProgressView().tint(.white) } } }
@@ -228,7 +228,7 @@ struct CameraView: View {
             else if let last = roll?.frames.last {
                 HStack(spacing: 8) {
                     StoredPhoto(url: library.url(last), aspectRatio: last.orientation.aspectRatio).frame(width: 24, height: 30).clipped()
-                    MicroLabel(text: "\(roll?.frames.count ?? 0). KARE KAYDEDİLDİ")
+                    MicroLabel(text: "\(last.number). KARE KAYDEDİLDİ")
                 }.accessibilityElement(children: .combine)
             }
         }

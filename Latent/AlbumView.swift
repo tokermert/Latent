@@ -24,16 +24,16 @@ struct AlbumView: View {
                         ContentUnavailableView("Rulon hazır", systemImage: "camera", description: Text("İlk kareni çekerek başla."))
                     } else {
                         LazyVGrid(columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)], alignment: .leading, spacing: 24) {
-                            ForEach(Array(roll.frames.enumerated()), id: \.element.id) { index, frame in
+                            ForEach(roll.frames) { frame in
                                 NavigationLink { PhotoDetailView(rollID: rollID, frameID: frame.id) } label: {
                                     VStack(alignment: .leading, spacing: 8) {
-                                        FilmBorder(number: index + 1, compact: true, film: roll.film) {
+                                        FilmBorder(number: frame.number, compact: true, film: roll.film) {
                                             StoredPhoto(url: library.url(frame), aspectRatio: frame.orientation.aspectRatio)
                                         }
-                                        MicroLabel(text: String(format: "%02d", index + 1))
+                                        MicroLabel(text: String(format: "%02d", frame.number))
                                     }
                                     .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel(LatentAccessibility.frame(rollTitle: roll.title, number: index + 1, capturedAt: frame.capturedAt))
+                                    .accessibilityLabel(LatentAccessibility.frame(rollTitle: roll.title, number: frame.number, capturedAt: frame.capturedAt))
                                     .accessibilityAddTraits(.isImage)
                                 }.buttonStyle(.plain)
                             }
@@ -78,7 +78,7 @@ struct PhotoDetailView: View {
     @State private var error: String?
     private var roll: FilmRoll? { library.roll(rollID) }
     private var frame: FilmFrame? { roll?.frames.first { $0.id == frameID } }
-    private var number: Int { (roll?.frames.firstIndex { $0.id == frameID } ?? 0) + 1 }
+    private var number: Int { frame?.number ?? 0 }
     var body: some View {
         ScrollView {
             if let frame, let roll {

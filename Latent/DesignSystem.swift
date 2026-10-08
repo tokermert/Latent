@@ -41,8 +41,8 @@ extension View {
 extension FilmRoll {
     /// "LATENT COLOR 400" → "COLOR 400": dar etiketlerde marka öneki tekrarlanmaz.
     var filmShortName: String { film.hasPrefix("LATENT ") ? String(film.dropFirst("LATENT ".count)) : film }
-    /// "07 / 36" biçiminde sayaç; kapasite `FilmRoll.capacity`'den gelir.
-    var counterText: String { String(format: "%02d / %02d", frames.count, Self.capacity) }
+    /// "07 / 36" biçiminde sayaç: kullanılan poz (silinenler dahil) / `FilmRoll.capacity`.
+    var counterText: String { String(format: "%02d / %02d", exposuresUsed, Self.capacity) }
 }
 
 /// VoiceOver metinleri. Görsel etiketler (ör. "07", "400 · 07 ▷") yerine tek cümle okunur.
