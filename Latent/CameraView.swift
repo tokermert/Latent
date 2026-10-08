@@ -7,9 +7,16 @@ final class CameraModel: ObservableObject {
     let service = CameraService()
     @Published var ready = false
     @Published var capturing = false
+    /// Camera problems (permission, interruption, capture). Cleared when the camera restarts.
     @Published var errorMessage: String?
     @Published var permissionDenied = false
+    /// A processed photo that is not saved yet; kept until a save succeeds.
     @Published var pending: ProcessedCapture?
+    /// Why `pending` is not saved. Separate from `errorMessage` so a camera restart or
+    /// interruption cannot hide the retry for an unsaved photo.
+    @Published var saveErrorMessage: String?
+    /// Ratio the next photo will be saved with, following the device orientation.
+    @Published private(set) var captureOrientation: FrameOrientation = .portrait
     /// Rotation for the live preview connection, from the rotation coordinator.
     @Published private(set) var previewAngle: CGFloat?
     let haptic = UIImpactFeedbackGenerator(style: .rigid)
@@ -23,6 +30,9 @@ final class CameraModel: ObservableObject {
     /// orientation, so this is right even with portrait lock on. Only multiples of 90 are
     /// accepted, so a face-up/face-down phone keeps the last valid value.
     private var captureAngle: CGFloat = 90
+    /// The session is stopped only after an in-flight capture, so leaving the app right after
+    /// pressing the shutter does not abort the photo.
+    private var stopAfterCapture = false
 
     init() {
         for name in [AVCaptureSession.wasInterruptedNotification, AVCaptureSession.runtimeErrorNotification] {
@@ -34,9 +44,14 @@ final class CameraModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.ready = self.service.session.isRunning
-                // Clear the interruption notice, but keep a pending save error visible.
-                if self.ready, self.pending == nil { self.errorMessage = nil }
+                // Clear the interruption notice; an unsaved photo keeps its own message.
+                if self.ready { self.errorMessage = nil }
             }
+        }.store(in: &observations)
+        // Nothing large is cached on the camera side except an unsaved photo, so the best
+        // relief is getting it onto disk.
+        NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification).sink { [weak self] _ in
+            Task { @MainActor in await self?.retryPendingSave() }
         }.store(in: &observations)
     }
 
@@ -51,7 +66,7 @@ final class CameraModel: ObservableObject {
         }
         guard token == generation else { return }
         guard authorized else { permissionDenied = true; errorMessage = CameraFailure.permission.localizedDescription; return }
-        permissionDenied = false; errorMessage = nil
+        permissionDenied = false; errorMessage = nil; stopAfterCapture = false
         do {
             let device = try await service.start()
             guard token == generation else { return }
@@ -60,7 +75,17 @@ final class CameraModel: ObservableObject {
         } catch { if token == generation { errorMessage = error.localizedDescription; ready = false } }
     }
 
-    func stop() { generation += 1; ready = false; service.stop() }
+    func stop() {
+        generation += 1; ready = false
+        if capturing { stopAfterCapture = true } else { service.stop() }
+    }
+
+    /// Called when the scene goes to the background: one more save attempt for an unsaved
+    /// photo, with background time so it can finish. A failure stays visible on return.
+    func enteredBackground() {
+        guard pending != nil else { return }
+        Task { await retryPendingSave() }
+    }
 
     func attach(previewLayer: AVCaptureVideoPreviewLayer) {
         guard previewLayer !== self.previewLayer else { return }
@@ -84,6 +109,8 @@ final class CameraModel: ObservableObject {
                 Task { @MainActor in
                     guard let self, coordinator === self.rotationCoordinator, let angle = Self.quarterTurn(angle) else { return }
                     self.captureAngle = angle
+                    let orientation = self.frameOrientation(for: angle)
+                    if orientation != self.captureOrientation { self.captureOrientation = orientation }
                 }
             },
             coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] coordinator, _ in
@@ -120,30 +147,46 @@ final class CameraModel: ObservableObject {
         guard ready, !capturing, pending == nil else { return }
         capturing = true; errorMessage = nil
         haptic.impactOccurred(intensity: 0.85)
+        let backgroundTime = BackgroundTime("Latent.capture")
+        defer { backgroundTime.end() }
         // Read at the moment of the press so turning the phone afterwards does not matter.
         let rotation = captureAngle
         let orientation = frameOrientation(for: rotation)
+        saveTarget = (library, rollID)
         do {
             let data = try await service.capture(rotation: rotation)
             pending = try await Task.detached(priority: .userInitiated) {
                 try PhotoProcessor.process(data: data, orientation: orientation)
             }.value
-            try await persist(library: library, rollID: rollID)
         } catch { errorMessage = error.localizedDescription }
-        capturing = false; haptic.prepare()
+        if pending != nil { await persist() }
+        capturing = false
+        if stopAfterCapture { stopAfterCapture = false; service.stop() } else { haptic.prepare() }
     }
 
-    func retrySave(library: LibraryModel, rollID: UUID) async {
+    func retrySave() async {
         guard !capturing else { return }
         capturing = true
-        do { try await persist(library: library, rollID: rollID); errorMessage = nil }
-        catch { errorMessage = error.localizedDescription }
+        await persist()
         capturing = false
+        if stopAfterCapture { stopAfterCapture = false; service.stop() }
     }
-    private func persist(library: LibraryModel, rollID: UUID) async throws {
-        guard let pending else { return }
-        try await library.save(pending, to: rollID)
-        self.pending = nil
+
+    private func retryPendingSave() async {
+        guard pending != nil else { return }
+        let backgroundTime = BackgroundTime("Latent.save")
+        defer { backgroundTime.end() }
+        await retrySave()
+    }
+
+    /// Library and roll of the photo in `pending`; set at capture time.
+    private var saveTarget: (library: LibraryModel, rollID: UUID)?
+    private func persist() async {
+        guard let pending, let saveTarget else { return }
+        do {
+            try await saveTarget.library.save(pending, to: saveTarget.rollID)
+            self.pending = nil; saveErrorMessage = nil
+        } catch { saveErrorMessage = error.localizedDescription }
     }
 }
 
@@ -167,8 +210,10 @@ struct CameraView: View {
                 HStack {
                     Button { dismiss() } label: { Label(roll?.title ?? "Arşiv", systemImage: "chevron.left").font(.headline) }
                         .disabled(busy)
+                        .accessibilityHint("Arşive döner")
                     Spacer()
                     MicroLabel(text: roll?.counterText ?? "")
+                        .accessibilityLabel(roll.map { "\($0.exposuresUsed) / \(FilmRoll.capacity) kare çekildi" } ?? "")
                 }.padding(.horizontal, 24)
                 // One hierarchy for both layouts: switching branches would recreate the preview
                 // view, its layer (a new session connection) and the rotation coordinator on
@@ -180,14 +225,18 @@ struct CameraView: View {
                         .padding(.horizontal, landscape ? 0 : 24)
                     if !landscape {
                         HStack { MicroLabel(text: "1× · SABİT KADRAJ"); Spacer(); MicroLabel(text: roll?.filmShortName ?? "") }.padding(.horizontal, 28)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Sabit 1x kadraj, \(roll?.filmShortName ?? "")")
                     }
                     controls().frame(width: landscape ? 120 : nil)
                 }.padding(.horizontal, landscape ? 24 : 0)
+                if camera.pending != nil, !camera.capturing, let message = camera.saveErrorMessage {
+                    Text("Son fotoğraf henüz kaydedilmedi. \(message)").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+                    Button("Kaydı yeniden dene") { Task { await camera.retrySave() } }
+                }
                 if let message = camera.errorMessage {
                     Text(message).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
-                    if camera.pending != nil {
-                        Button("Kaydı yeniden dene") { Task { await camera.retrySave(library: library, rollID: rollID) } }.disabled(camera.capturing)
-                    } else if camera.permissionDenied {
+                    if camera.permissionDenied {
                         Button("Ayarları aç") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
                     } else { Button("Tekrar dene") { Task { await camera.start() } } }
                 }
@@ -200,6 +249,7 @@ struct CameraView: View {
         .onDisappear { camera.stop() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await camera.start() } } else { camera.stop() }
+            if phase == .background { camera.enteredBackground() }
         }
     }
 
@@ -214,6 +264,16 @@ struct CameraView: View {
                     .overlay { if !camera.ready { Color.black.opacity(0.4); if camera.errorMessage == nil { ProgressView().tint(.white) } } }
             }.frame(width: geometry.size.width, height: geometry.size.height)
         }
+        // The edge print and preview are one element; the ratio follows how the phone is held.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Vizör")
+        .accessibilityValue(viewfinderDescription)
+    }
+
+    private var viewfinderDescription: String {
+        let ratio = camera.captureOrientation == .portrait ? "2:3 dikey kadraj" : "3:2 yatay kadraj"
+        guard let roll, !roll.isFinished else { return ratio }
+        return "\(ratio), sıradaki kare \(roll.nextFrameNumber)"
     }
 
     private func controls() -> some View {
@@ -231,8 +291,26 @@ struct CameraView: View {
                 HStack(spacing: 8) {
                     StoredPhoto(url: library.url(last), aspectRatio: last.orientation.aspectRatio).frame(width: 24, height: 30).clipped()
                     MicroLabel(text: "\(last.number). KARE KAYDEDİLDİ")
-                }.accessibilityElement(children: .combine)
+                }.accessibilityElement(children: .ignore)
+                .accessibilityLabel("Son kare: \(last.number). kare kaydedildi")
             }
         }
+    }
+}
+
+/// Keeps the app running briefly if it is backgrounded while a photo is processed or saved.
+@MainActor
+private final class BackgroundTime {
+    private var id = UIBackgroundTaskIdentifier.invalid
+    init(_ name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            // UIKit calls the expiration handler on the main thread.
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }
