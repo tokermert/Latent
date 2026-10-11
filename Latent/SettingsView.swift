@@ -56,7 +56,7 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("Sürüm", value: LatentConfig.versionText)
                 } header: { Text("Hakkında") } footer: {
-                    Text("Latent Color 400 özgün bir görünümdür; herhangi bir film markasını taklit etmez.")
+                    Text("Latent filmleri özgün görünümlerdir; herhangi bir film markasını taklit etmez.")
                 }
             }
             .navigationTitle("Ayarlar").navigationBarTitleDisplayMode(.inline)
@@ -110,7 +110,8 @@ private struct InfoList: View {
 
 struct HelpView: View {
     private let entries: [InfoEntry] = [
-        InfoEntry("Rulo nedir?", "Bir rulo, bir gezi ya da bir dönem için başlattığın \(FilmRoll.capacity) karelik filmdir. Adını sen verirsin; film görünümü rulo boyunca aynı kalır ve kareler kendiliğinden bir albüm olur."),
+        InfoEntry("Rulo nedir?", "Bir rulo, bir gezi ya da bir dönem için başlattığın \(FilmRoll.capacity) karelik filmdir. Adını ve filmini sen seçersin; film rulo boyunca aynı kalır ve kareler kendiliğinden bir albüm olur."),
+        InfoEntry("Filmimi sonradan değiştirebilir miyim?", "Hayır. Film rulo başında seçilir ve rulo boyunca aynı kalır; böylece bütün kareler aynı görsel karakteri taşır. Başka bir film denemek için yeni rulo başlat. Kamera önizlemesi filtresizdir; film görünümü çekilen kareye uygulanır."),
         InfoEntry("Neden \(FilmRoll.capacity) kare?", "Gerçek 35 mm film rulosu gibi. Sınırlı kare, her çekimi biraz daha düşünerek yapmayı ve gezinin sonunda derli toplu bir seri elde etmeyi sağlar."),
         InfoEntry("Neden zoom yok?", "Latent tek bir sabit kadrajla çeker (ana kamera, 1×). Yaklaşmak için birkaç adım atarsın; bütün rulo aynı bakış açısını taşır."),
         InfoEntry("Sildiğim kare neden geri gelmiyor?", "Filmde olduğu gibi, çekilen her kare rulodan bir hak kullanır. Bir kareyi silmek fotoğrafı kaldırır ama kare hakkını geri vermez; numaralar da değişmez."),

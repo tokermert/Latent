@@ -132,7 +132,7 @@ struct ArchiveView: View {
             }
             HStack {
                 Circle().fill(roll.isFinished ? LatentTheme.muted : LatentTheme.orange).frame(width: 6, height: 6)
-                MicroLabel(text: roll.isFinished ? "TAMAMLANDI · \(roll.filmShortName)" : "\(roll.filmShortName) · 35 mm FİLM")
+                MicroLabel(text: roll.isFinished ? "TAMAMLANDI · \(roll.filmLabel)" : "\(roll.filmLabel) · 35 mm FİLM")
                 Spacer(); MicroLabel(text: roll.counterText)
             }.padding(.top, 12).overlay(alignment: .top) { Rectangle().fill(LatentTheme.rule).frame(height: 1) }
         }.padding(.bottom, 18)
@@ -140,7 +140,7 @@ struct ArchiveView: View {
 
     /// Örnek: "London, 12 Eki 2026, 7 kare, devam ediyor, 29 kare kaldı"
     private func coverAccessibilityLabel(_ roll: FilmRoll) -> String {
-        let base = "\(roll.title), \(LatentAccessibility.date(roll.createdAt)), \(roll.frames.count) kare"
+        let base = "\(roll.title), \(roll.stock.spokenName)\(roll.stock.isMonochrome ? " siyah beyaz" : ""), \(LatentAccessibility.date(roll.createdAt)), \(roll.frames.count) kare"
         return roll.isFinished ? base + ", tamamlandı" : base + ", devam ediyor, \(roll.remaining) kare kaldı"
     }
 }
@@ -151,6 +151,8 @@ struct NewRollView: View {
     @State private var title = ""
     @State private var saving = false
     @State private var error: String?
+    /// Film rulo boyunca kilitli; yalnızca burada seçilir.
+    @State private var stock = FilmStock.default
     /// true ise kaydedince mevcut aktif rulo tamamlanır (kullanıcı arşivde onayladı).
     var finishingActive = false
     let onCreated: (FilmRoll) -> Void
@@ -162,13 +164,20 @@ struct NewRollView: View {
                         .onChange(of: title) { _, new in if new.count > RollTitle.limit { title = String(new.prefix(RollTitle.limit)) } }
                 }
                 Section {
-                    LabeledContent("Film", value: "Latent Color 400")
+                    FilmPicker(selection: $stock)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                        .listRowBackground(Color.clear)
+                } header: { Text("Film seç") } footer: {
+                    Text("Film rulo boyunca değişmez. Kamera önizlemesi filtresizdir; görünüm çekilen kareye uygulanır. Örneğe dokunarak büyüt.")
+                }
+                Section {
+                    LabeledContent("Film", value: stock.spokenName)
                     LabeledContent("Kapasite", value: "\(FilmRoll.capacity) kare")
                     LabeledContent("Format", value: "35 mm film · 3:2 / 2:3")
                 } footer: {
                     if finishingActive, let active = library.activeRoll {
-                        Text("Görünüm rulo boyunca sabit. Fotoğraflar bu cihazda saklanır. Filmi taktığında \(active.title) tamamlanır.")
-                    } else { Text("Görünüm rulo boyunca sabit. Fotoğraflar bu cihazda saklanır.") }
+                        Text("Fotoğraflar bu cihazda saklanır. Filmi taktığında \(active.title) tamamlanır.")
+                    } else { Text("Fotoğraflar bu cihazda saklanır.") }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
                 Button { create() } label: { HStack { Text("Filmi tak"); Spacer(); if saving { ProgressView() } else { Image(systemName: "arrow.right") } } }
@@ -183,7 +192,7 @@ struct NewRollView: View {
         saving = true
         Task {
             do {
-                let roll = try await library.createRoll(title: title, finishingActive: finishingActive)
+                let roll = try await library.createRoll(title: title, stock: stock, finishingActive: finishingActive)
                 onCreated(roll)
                 dismiss()
             } catch { self.error = error.localizedDescription; saving = false }
