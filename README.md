@@ -10,7 +10,7 @@ SwiftUI/AVFoundation proje taslağı hazırlanmıştır. **Gerçek iPhone’da h
 
 1. Xcode’u aç; ilk açılışı tamamla ve iOS platform desteğinin indirildiğini doğrula.
 2. Bu klasördeki `Latent.xcodeproj` dosyasını Xcode ile aç.
-3. `Latent` hedefinde **Signing & Capabilities → Team** altında kendi Apple hesabını seç. Gerekirse bundle identifier’ı benzersiz bir değerle değiştir; mevcut `com.example.Latent` geliştirme için yer tutucudur.
+3. İmzalama projede ayarlı: Team `93QRMXC6Y2`, bundle identifier `com.merttoker.latent`. Xcode bu hesapla girişli olmalı (Settings → Accounts).
 4. iPhone’u bağla, güven isteğini onayla ve gerekiyorsa telefonda Developer Mode’u aç. Hedef cihaz olarak iPhone’u seç, Run’a bas.
 5. Uygulamada ilk rulonu oluştur ve kamera izni ver. iOS 17 veya üzeri hedeflenmiştir.
 
