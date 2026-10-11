@@ -81,6 +81,7 @@ struct Checks {
         print("PASS: centered 2:3 and 3:2 crop geometry")
         try await storageChecks()
         try await rollRuleChecks()
+        try await filmStockChecks()
         print("20 core checks passed.")
     }
 
@@ -250,5 +251,22 @@ struct Checks {
         try require(!json.contains("Gizli") && !counted.contains { json.contains($0.id.uuidString) }
                     && !counted.flatMap(\.frames).contains { json.contains($0.id.uuidString) }, "Summary leaks titles or ids")
         print("PASS: feedback summary has counts and no titles or ids")
+    }
+
+    static func filmStockChecks() async throws {
+        try require(FilmStock.all.count == 4 && FilmStock.default == .color400, "Film list wrong")
+        try require(FilmStock.stock(named: "UNKNOWN 800") == .default && FilmStock.stock(named: "LATENT MONO 400") == .mono400,
+                    "Film name lookup wrong")
+        try require(FilmStock.stock(id: "gold200") == .gold200 && FilmStock.stock(id: "x") == nil, "Film id lookup wrong")
+        print("PASS: film lookup and unknown-name fallback")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("LatentSmoke-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repository = RollRepository(directory: dir); _ = try await repository.load()
+        let roll = try await repository.createRoll(title: "Altın", stock: .gold200)[0]
+        let reread = try await RollRepository(directory: dir).load()
+        try require(roll.stock == .gold200 && reread[0].stock == .gold200 && reread[0].film == "LATENT GOLD 200",
+                    "Chosen film not persisted")
+        print("PASS: new roll keeps its chosen film")
     }
 }

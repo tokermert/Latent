@@ -27,8 +27,8 @@ final class LibraryModel: ObservableObject {
 
     /// Throws `LibraryError.activeRollExists` while a roll is open. With `finishingActive`, the open
     /// roll is finished and the new one created in one save (after the user confirms).
-    func createRoll(title: String, finishingActive: Bool = false) async throws -> FilmRoll {
-        rolls = try await repository.createRoll(title: title, finishingActive: finishingActive)
+    func createRoll(title: String, stock: FilmStock = .default, finishingActive: Bool = false) async throws -> FilmRoll {
+        rolls = try await repository.createRoll(title: title, stock: stock, finishingActive: finishingActive)
         return rolls[0]
     }
 
