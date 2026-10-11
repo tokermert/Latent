@@ -10,7 +10,7 @@ SwiftUI/AVFoundation proje taslağı hazırlanmıştır. **Gerçek iPhone’da h
 
 1. Xcode’u aç; ilk açılışı tamamla ve iOS platform desteğinin indirildiğini doğrula.
 2. Bu klasördeki `Latent.xcodeproj` dosyasını Xcode ile aç.
-3. `Latent` hedefinde **Signing & Capabilities → Team** altında kendi Apple hesabını seç. Gerekirse bundle identifier’ı benzersiz bir değerle değiştir; mevcut `com.example.Latent` geliştirme için yer tutucudur.
+3. İmzalama projede ayarlı: Team `93QRMXC6Y2`, bundle identifier `com.merttoker.latent`. Xcode bu hesapla girişli olmalı (Settings → Accounts).
 4. iPhone’u bağla, güven isteğini onayla ve gerekiyorsa telefonda Developer Mode’u aç. Hedef cihaz olarak iPhone’u seç, Run’a bas.
 5. Uygulamada ilk rulonu oluştur ve kamera izni ver. iOS 17 veya üzeri hedeflenmiştir.
 
@@ -55,7 +55,7 @@ cd Core
 swift test
 ```
 
-Dosyalar `Application Support/Latent/` altında tutulur. `library.json` atomik yazılır; yeni fotoğraf dosyaları yazıldıktan sonra sayaç güncellenir. Kaydetme hatasında yalnızca o çekime ait yeni dosyalar geri alınır. Okunamayan arşiv otomatik sıfırlanmaz. Ani süreç sonlandırmasının dosya yazımı ile manifest yazımı arasına (ya da silme sırasında manifest ile dosya silimi arasına) denk gelmesi durumunda sahipsiz dosyalar kalabilir. Bunlar bir sonraki açılışta, yalnızca manifest başarıyla okunduysa temizlenir: sadece `<UUID>-<varyant>.jpg` adlı ve manifestte karşılığı olmayan dosyalar silinir; başka adlı dosyalara dokunulmaz; manifest yoksa, okunamıyorsa veya desteklenmiyorsa hiçbir dosya silinmez. Rulo/kare silmede önce manifest atomik yazılır, sonra dosyalar silinir. Silinen kare 36'lık hakkı geri vermez; kare numaraları çekim sırasını korur. Manifest şeması `version 2`'dir; `version 1` arşivler açılışta kayıpsız taşınır ve ilk kayıtta v2 olarak yazılır. Paylaşım için üretilen geçici çerçeveli görseller (`tmp/LatentShares`) uygulama açılışında temizlenir.
+Dosyalar `Application Support/Latent/` altında tutulur. `library.json` atomik yazılır; yeni fotoğraf dosyaları yazıldıktan sonra sayaç güncellenir. Kaydetme hatasında yalnızca o çekime ait yeni dosyalar geri alınır. Okunamayan arşiv otomatik sıfırlanmaz. Ani süreç sonlandırmasının dosya yazımı ile manifest yazımı arasına (ya da silme sırasında manifest ile dosya silimi arasına) denk gelmesi durumunda sahipsiz dosyalar kalabilir. Bunlar bir sonraki açılışta, yalnızca manifest başarıyla okunduysa temizlenir: sadece `<UUID>-<varyant>.jpg` adlı ve manifestte karşılığı olmayan dosyalar silinir; başka adlı dosyalara dokunulmaz; manifest yoksa, okunamıyorsa veya desteklenmiyorsa hiçbir dosya silinmez. Rulo/kare silmede önce manifest atomik yazılır, sonra dosyalar silinir. Silinen kare 36'lık hakkı geri vermez; kare numaraları çekim sırasını korur. Manifest şeması `version 3`'tür (v2: kare numarası/poz sayacı/kapak, v3: albüm açılma ve paylaşım sayaçları); `version 1` ve `2` arşivler açılışta kayıpsız taşınır ve ilk kayıtta v3 olarak yazılır. Aynı anda yalnızca bir açık rulo olabilir; eski arşivde birden fazla açık rulo varsa veriye dokunulmaz, en yenisi aktif sayılır. Paylaşım için üretilen geçici çerçeveli görseller (`tmp/LatentShares`) uygulama açılışında temizlenir.
 
 ## Gerçek cihazda ilk kabul kontrolü
 

@@ -48,14 +48,14 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(try photoNames(dir).count, 9, "Migration must keep every referenced photo")
 
         let renamed = try await repository.renameRoll(rollID, title: "Londra")
-        XCTAssertEqual(try manifestVersion(dir), 2)
+        XCTAssertEqual(try manifestVersion(dir), RollRepository.manifestVersion)
         let reloaded = try await RollRepository(directory: dir).load()
         XCTAssertEqual(reloaded, renamed)
     }
 
     func testFutureManifestIsUnsupportedAndUntouched() async throws {
         let dir = try directory(); let url = dir.appendingPathComponent("library.json")
-        let bytes = Data(#"{"version":3,"rolls":[]}"#.utf8); try bytes.write(to: url)
+        let bytes = Data(#"{"version":4,"rolls":[]}"#.utf8); try bytes.write(to: url)
         do { _ = try await RollRepository(directory: dir).load(); XCTFail("Loaded a newer manifest") }
         catch { XCTAssertEqual(error as? LibraryError, .unsupportedLibrary) }
         XCTAssertEqual(try Data(contentsOf: url), bytes)
@@ -142,7 +142,7 @@ final class StorageTests: XCTestCase {
     func testDeleteRollRemovesManifestEntryThenFiles() async throws {
         let dir = try directory(); let repository = RollRepository(directory: dir)
         let doomed = try await roll(repository, frames: 2)
-        let kept = try await repository.createRoll(title: "Kept")[0].id
+        let kept = try await repository.createRoll(title: "Kept", finishingActive: true)[0].id
         _ = try await repository.append(to: kept, orientation: .portrait, files: files)
         let rolls = try await repository.deleteRoll(doomed)
         XCTAssertEqual(rolls.map(\.id), [kept])

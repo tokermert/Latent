@@ -1,13 +1,14 @@
 import Foundation
 
 public enum LibraryError: LocalizedError, Equatable {
-    case notLoaded, missingRoll, missingFrame, finishedRoll, emptyTitle, emptyImage, unsupportedLibrary, damagedLibrary
+    case notLoaded, missingRoll, missingFrame, finishedRoll, activeRollExists, emptyTitle, emptyImage, unsupportedLibrary, damagedLibrary
     public var errorDescription: String? {
         switch self {
         case .notLoaded: return "Fotoğraf arşivi henüz hazır değil."
         case .missingRoll: return "Bu rulo bulunamadı."
         case .missingFrame: return "Bu kare bulunamadı."
         case .finishedRoll: return "Bu rulo tamamlandı. Yeni bir rulo başlat."
+        case .activeRollExists: return "Açık bir rulon var. Yeni rulo başlatmak için önce onu bitir."
         case .emptyTitle: return "Rulona bir isim ver."
         case .emptyImage: return "Fotoğraf verisi alınamadı; kare sayacın değişmedi."
         case .unsupportedLibrary: return "Bu arşiv daha yeni bir Latent sürümüyle oluşturulmuş."
@@ -28,7 +29,8 @@ public enum ShareExports {
 
 public actor RollRepository {
     /// Manifest schema. 1: initial release. 2: frame numbers, exposure counter, cover frame.
-    public static let manifestVersion = 2
+    /// 3: album-open and share counters (absent counters read as 0).
+    public static let manifestVersion = 3
     private struct Header: Decodable { var version: Int }
     private struct Snapshot: Codable {
         var version = RollRepository.manifestVersion
@@ -70,9 +72,35 @@ public actor RollRepository {
         return snapshot!.rolls
     }
 
-    public func createRoll(title: String) throws -> [FilmRoll] {
+    public func activeRoll() -> FilmRoll? { snapshot.flatMap { FilmRoll.activeRoll(in: $0.rolls) } }
+
+    /// Throws `activeRollExists` while a roll is open, unless `finishingActive` is true: then the
+    /// active roll is finished and the new one created in the same manifest commit.
+    public func createRoll(title: String, finishingActive: Bool = false) throws -> [FilmRoll] {
         guard var next = snapshot else { throw LibraryError.notLoaded }
-        next.rolls.insert(FilmRoll(title: try Self.normalizedTitle(title)), at: 0)
+        let title = try Self.normalizedTitle(title)
+        if let active = FilmRoll.activeRoll(in: next.rolls) {
+            guard finishingActive else { throw LibraryError.activeRollExists }
+            let index = next.rolls.firstIndex(where: { $0.id == active.id })!
+            next.rolls[index].finishedAt = Date()
+        }
+        next.rolls.insert(FilmRoll(title: title), at: 0)
+        try commit(next)
+        return next.rolls
+    }
+
+    public func recordAlbumOpened(_ rollID: UUID) throws -> [FilmRoll] {
+        try updateRoll(rollID) { $0.albumOpenCount += 1 }
+    }
+
+    public func recordShare(_ rollID: UUID) throws -> [FilmRoll] {
+        try updateRoll(rollID) { $0.shareCount += 1 }
+    }
+
+    private func updateRoll(_ rollID: UUID, _ change: (inout FilmRoll) -> Void) throws -> [FilmRoll] {
+        guard var next = snapshot else { throw LibraryError.notLoaded }
+        guard let index = next.rolls.firstIndex(where: { $0.id == rollID }) else { throw LibraryError.missingRoll }
+        change(&next.rolls[index])
         try commit(next)
         return next.rolls
     }
@@ -209,6 +237,7 @@ public actor RollRepository {
             let roll = snapshot.rolls[r]
             let numbers = roll.frames.map(\.number)
             guard roll.exposuresUsed <= FilmRoll.capacity, roll.frames.count <= roll.exposuresUsed,
+                  roll.albumOpenCount >= 0, roll.shareCount >= 0,
                   numbers.allSatisfy({ $0 >= 1 && $0 <= roll.exposuresUsed }),
                   zip(numbers, numbers.dropFirst()).allSatisfy({ $0 < $1 }) else { throw LibraryError.damagedLibrary }
             // A dangling cover is harmless; fall back to the first frame rather than refusing the library.
