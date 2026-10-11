@@ -39,8 +39,10 @@ extension View {
 }
 
 extension FilmRoll {
-    /// "LATENT COLOR 400" → "COLOR 400": dar etiketlerde marka öneki tekrarlanmaz.
-    var filmShortName: String { film.hasPrefix("LATENT ") ? String(film.dropFirst("LATENT ".count)) : film }
+    /// "COLOR 400": dar etiketlerde marka öneki tekrarlanmaz.
+    var filmShortName: String { stock.shortName }
+    /// Arşiv kapağı etiketi; siyah-beyaz filmlerde "S/B" ipucu: "MONO 400 · S/B".
+    var filmLabel: String { stock.isMonochrome ? "\(stock.shortName) · S/B" : stock.shortName }
     /// "07 / 36" biçiminde sayaç: kullanılan poz (silinenler dahil) / `FilmRoll.capacity`.
     var counterText: String { String(format: "%02d / %02d", exposuresUsed, Self.capacity) }
 }
@@ -132,7 +134,7 @@ struct FilmBorder<Content: View>: View {
     var number: Int
     var compact = false
     /// Kenar baskısı; varsayılan ilk film görünümü. Rulo bilinen yerlerde `roll.film` geçilir.
-    var film = "LATENT COLOR 400"
+    var film = FilmStock.default.name
     /// Kenara basılacak çekim tarihi; nil ise yazılmaz.
     var date: Date? = nil
     @ViewBuilder var content: () -> Content
