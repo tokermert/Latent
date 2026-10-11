@@ -25,6 +25,7 @@
 | 🔄 | Kamera sağlamlığı: arka plana geçişte kayıt, bellek uyarısı, VoiceOver | Kamera |
 | ⏸ | Ekran tasarımı kararları (`docs/screens.md`): kontakt baskı düzeni, rulo tamamlanma anı, paspartu, silme akışlarının son hâli | Mert + UI |
 | ⏸ | UX incelemesi (ekran görüntüleriyle) | Mert → UX ajanı |
+| 🔄 | 4 film görünümü (Color 400, Gold 200, Slide 100, Mono 400) ve yeni rulo ekranında örnekli film seçimi | Film + UI |
 
 **TestFlight için zorunlu olanlar:** 🔄 satırlarının tamamı. ⏸ satırları betayı engellemez; geçici hâlleriyle beta açılabilir.
 
@@ -43,8 +44,8 @@
 
 Sıra önemli, çünkü ilk ikisi Apple tarafında birkaç gün sürebilir.
 
-1. **Apple Developer Program üyeliği** — developer.apple.com/programs, yıllık $99. Onay 1–2 gün sürebilir. **Bunu hemen başlat.**
-2. **Bundle ID kararı.** Örneğin `com.merttoker.latent`. Bir kez yüklendikten sonra değiştirilemez.
+1. ✅ ~~**Apple Developer Program üyeliği**~~ (hesap "Developer Team" olarak görünüyor; App Store Connect'te doğrula) — developer.apple.com/programs, yıllık $99. Onay 1–2 gün sürebilir. **Bunu hemen başlat.**
+2. ~~**Bundle ID kararı.**~~ ✅ `com.merttoker.latent`, Team `93QRMXC6Y2` projede ayarlı.
 3. **Geri bildirim e-postası.** Örneğin `latent@…`. Uygulamadaki "E-posta gönder" satırına ve TestFlight'a yazılacak.
 4. **Gizlilik politikası URL'si.** `docs/privacy-policy.md` metnini bir web sayfasına koy. Notion'da herkese açık bir sayfa ya da GitHub Pages yeterli. Harici test için Apple bu URL'yi istiyor.
 5. **App Store Connect'te uygulama kaydı.** "My Apps → +", ad: Latent, dil: Türkçe, bundle ID.
@@ -52,7 +53,8 @@ Sıra önemli, çünkü ilk ikisi Apple tarafında birkaç gün sürebilir.
 7. **Dahili test.** Kendin ve en fazla 100 ekip üyesi; inceleme gerektirmez.
 8. **Harici test.** Testçi listesi ve Beta App Review. İlk inceleme yaklaşık 1 gün sürer. Metinler `docs/testflight.md`'de.
 9. **Son ikon tasarımı.** İsteğe bağlı; beta geçici ikonla çıkabilir.
-10. **Testçi bulma.** Önümüzdeki 4–6 hafta içinde gezisi olan 10–20 kişi (PRD §12).
+10. **Film örnek fotoğrafları.** Kendi çektiğin, filtresiz 4 fotoğraf: (1) insan/portre, (2) gökyüzü + manzara/deniz, (3) sokak/şehir, (4) iç mekan ya da akşam ışığı. Baş ajana yükle; yer tutucuların yerine konacak.
+11. **Testçi bulma.** Önümüzdeki 4–6 hafta içinde gezisi olan 10–20 kişi (PRD §12).
 
 ## 4. Beta öncesi son kontrol (cihazda)
 
