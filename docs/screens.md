@@ -13,6 +13,7 @@ Akış: **Arşiv → (Yeni rulo) → Kamera** ve **Arşiv → Albüm → Tek kar
 | Albüm | `Latent/AlbumView.swift` (`AlbumView`) | UI |
 | Tek kare | `Latent/AlbumView.swift` (`PhotoDetailView`) | UI |
 | Ayarlar, Yardım, Gizlilik | `Latent/SettingsView.swift` | UI |
+| Film seçimi (kartlar, örnek görüntüleyici) | `Latent/FilmPickerView.swift` | UI (model ve örnek render: Film ajanı) |
 | Ortak bileşenler | `Latent/DesignSystem.swift` | UI |
 
 ## Alınan kararlar
@@ -37,6 +38,23 @@ Gerçek film kenar baskısı hissi için kenar yazısı **film + kare + tarih** 
 - *Köşe damgası ızgarada yok.* Uzun kenarın %3,2'si ızgarada yaklaşık 5–7 pt'ye düşüyor: okunmuyor, sadece turuncu leke gibi duruyor ve 36 karede görsel gürültü yapıyor. Tarih bilgisi kenarda var; damga tek karede tam boyutta anlam kazanıyor.
 
 ---
+
+### Film seçimi (Mert, 11 Ekim 2026)
+Yeni rulo başlatırken kullanıcı **4 filmden** birini seçer (`FilmStock.all`: Color 400, Gold 200, Slide 100, Mono 400); film **rulo boyunca kilitlidir**. Her film için 4 örnek görsel gösterilir ki "bu filmle çekersem sonuç neye benzer" görülsün. Model, görünüm motoru ve örnek render Film ajanında (`FilmStock`, `FilmSamples`); ekran UI'da.
+
+- **Kartlar:** Yeni rulo sayfasında "Film seç" bölümü, yatay kaydırılan kartlar (sayfa hizalı). Her kartta kısa ad (`GOLD 200`), `ISO 200` (siyah-beyazda `· S/B`), tek cümle karakter (`summary`) ve 4 örnekten oluşan küçük **kontakt şerit**: kompakt `FilmBorder` kenarlı, 2:3'e kırpılmış kareler. Seçili kart turuncu çerçeve + dolu onay işareti. Varsayılan `FilmStock.default`.
+- **Büyük görünüm:** Şeritteki bir örneğe dokununca sheet açılır; 4 örnek sayfa sayfa kaydırılır, her biri tam film kenarıyla (`LATENT GOLD 200 ▸ 03`), altta film adı, ISO ve karakter cümlesi.
+- **Yükleme:** Kartlar hemen görünür; örnekler gelene kadar film kenarlı gri yer tutucu + ProgressView. Şerit 360 px, büyük görünüm 1600 px ister (`FilmSamples` önbellekli).
+- **Bilgi satırı:** "Film rulo boyunca değişmez. Kamera önizlemesi filtresizdir; görünüm çekilen kareye uygulanır."
+- **Kayıt:** "Filmi tak" → `createRoll(title:stock:finishingActive:)`.
+- **Başka yerler:** Kenar baskısı, sayaç, kamera etiketi ve tek kare `roll.film` / `roll.stock.shortName`'den gelir; arayüzde sabit "COLOR 400" kalmadı. Arşiv kapağında siyah-beyaz rulolar `MONO 400 · S/B` olarak işaretlenir (VoiceOver: "siyah beyaz"). Ayarlar → Hakkında: "Latent filmleri özgün görünümlerdir"; Yardım'a "Filmimi sonradan değiştirebilir miyim?" eklendi.
+- **VoiceOver:** Kart "Latent Gold 200, ISO 200, <karakter>, seçili"; örnekler "Örnek 1, Gold 200". Adlar POSIX yerel ayarıyla büyük/küçük harfe çevrilir (Türkçe dönüşüm "SLIDE"ı "Slıde" yapardı).
+
+**Açık sorular (film seçimi)**
+1. **"Filmsiz" karşılaştırma:** Büyük görünümde basılı tutunca taban (işlenmemiş) görüntüyü göstermek çok değerli olur. Bunun için Film ajanından ayrı bir API gerekir (ör. `FilmSamples.baseImage(index:maxPixel:)`); şimdilik eklenmedi, uydurma bir taban kullanılmadı.
+2. Kartlar yatay kaydırma mı kalsın, yoksa 2×2 film kutusu ızgarası mı? Dört filmin hepsi aynı anda görünmüyor.
+3. Seçilen film kamerada daha görünür olsun mu (ör. vizör kenarı ya da sayaç yanında film rengiyle küçük işaret)?
+4. Kartlarda film kutusu illüstrasyonu (gerçek marka taklidi olmadan) ister miyiz?
 
 ## Geçici kararlar (Mert'le netleşecek)
 
@@ -89,19 +107,20 @@ Mert cihazda test edemezken ilerleyebilmek için aşağıdakiler **iOS'un yerle�
 ## 2. Yeni rulo
 
 ### Bugün
-- Sistem `Form` sayfası (sheet): ad alanı ("Örneğin London"), sabit bilgiler — Film: Latent Color 400 · Kapasite: 36 kare · Format: **35 mm film** · 3:2 / 2:3 — ve "Filmi tak" düğmesi.
+- Sistem `Form` sayfası (sheet): ad alanı ("Örneğin London"), **Film seç** kartları (yukarıda), seçimin özeti — Film: Latent Gold 200 · Kapasite: 36 kare · Format: **35 mm film** · 3:2 / 2:3 — ve "Filmi tak" düğmesi.
 - Kaydedince sheet kapanır ve kamera tam ekran açılır.
 
 ### PRD §6 / §9 ile farklar
 - ✅ Ad zorunlu, film bilgisi gösteriliyor, kamera hemen açılıyor.
 - ✅ Ad alanı 60 karakterde duruyor (sayaç yok).
 - Aktif rulo bitirilerek açıldıysa altbilgi "Filmi taktığında London tamamlanır." der.
-- ⚠️ Görsel olarak tamamen standart iOS formu; ürünün film/kamera dili burada yok.
+- ✅ Film seçimi (PRD Faz 3 "film seçimini rulo başında kilitleme") öne alındı.
+- ⚠️ Form hâlâ standart iOS; film dili yalnızca kartlarda.
 
 ### Açık sorular
 1. "Filmi tak" anı bir ritüel mi olmalı (film kutusu, rulonun kameraya sarılması, kısa haptic) yoksa sade form mu kalsın?
 2. 60 karakter: sayaç mı gösterelim, sınırda mı keselim?
-3. İleride film seçimi gelince (Faz 3) bu sayfa film kutularından seçim ekranına mı dönüşecek? Şimdiden yer ayıralım mı?
+3. ~~Film seçimi~~ → yapıldı; açık sorular "Film seçimi" bölümünde.
 
 ---
 
@@ -183,5 +202,5 @@ Mert cihazda test edemezken ilerleyebilmek için aşağıdakiler **iOS'un yerle�
 
 ## Bağımlılıklar
 
-- Silme, ad değiştirme ve kapak API'leri `main`'de (`renameRoll`, `deleteRoll`, `deleteFrame(_:from:)`, `setCover(_:for:)`).
-- Depolama ajanından gelecek, bu dalda henüz derlenmeyen API'ler: `LibraryModel.activeRoll`, `createRoll(title:finishingActive:)`, `recordAlbumOpened(_:)`, `recordShare(_:)`, `feedbackSummaryURL()`. Koordinatör iki dalı entegrasyonda birleştirecek.
+- Silme, ad değiştirme, kapak, tek aktif rulo ve ölçüm API'leri `integration/wave-2`'de.
+- Film ajanından (`agent/film`) gelecek, bu dalda henüz derlenmeyen API'ler: `FilmStock` (`id`, `name`, `shortName`, `iso`, `summary`, `isMonochrome`, `all`, `default`), `FilmRoll.stock`, `LibraryModel.createRoll(title:stock:finishingActive:)`, `FilmSamples.count`, `FilmSamples.image(stock:index:maxPixel:)` (`maxPixel` `Int` varsayıldı). Koordinatör dalları entegrasyonda birleştirecek.
