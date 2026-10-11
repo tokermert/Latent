@@ -19,14 +19,25 @@ enum FilmSamples {
         return image
     }
 
+    /// The same base photo without any film look, for a "hold to compare" view. Same rules as `image`.
+    static func baseImage(index: Int, maxPixel: CGFloat) async -> UIImage? {
+        guard (0..<count).contains(index), maxPixel > 0 else { return nil }
+        let key = "base-\(index)-\(Int(maxPixel.rounded()))" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        let image = await Task.detached(priority: .userInitiated) { render(stock: nil, index: index, maxPixel: maxPixel) }.value
+        if let image { cache.setObject(image, forKey: key) }
+        return image
+    }
+
     /// NSCache is thread-safe.
     private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 64
+        cache.countLimit = 80
         return cache
     }()
 
-    private static func render(stock: FilmStock, index: Int, maxPixel: CGFloat) -> UIImage? {
+    /// `stock == nil` returns the base photo unchanged.
+    private static func render(stock: FilmStock?, index: Int, maxPixel: CGFloat) -> UIImage? {
         guard let url = Bundle.main.url(forResource: "sample-\(index + 1)", withExtension: "jpg"),
               let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
@@ -36,6 +47,7 @@ enum FilmSamples {
             kCGImageSourceShouldCacheImmediately: true
         ]
         guard let base = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        guard let stock else { return UIImage(cgImage: base) }
         // Fixed seed: the same sample always shows the same grain.
         let output = FilmLook.apply(CIImage(cgImage: base), stock: stock, seed: 0x5A3D_0000 + UInt64(index))
         guard let rendered = PhotoProcessor.ciContext.createCGImage(output, from: output.extent) else { return nil }
