@@ -15,19 +15,18 @@ enum PhotoProcessingError: LocalizedError {
 
 enum PhotoProcessor {
     /// Shared: creating a CIContext per capture is expensive. CIContext is safe to use across threads.
-    private static let ciContext = CIContext()
+    /// Also used by `FilmSamples`.
+    static let ciContext = CIContext()
 
-    static func process(data: Data, orientation: FrameOrientation) throws -> ProcessedCapture {
+    /// `stock` is the roll's film; `seed` fixes the grain pattern (see `FilmLook.seed(for:)`).
+    static func process(data: Data, orientation: FrameOrientation, stock: FilmStock = .default, seed: UInt64 = 0) throws -> ProcessedCapture {
         // EXIF rotation is applied while decoding, at full size, without redrawing the image.
         guard let cg = uprightImage(from: data) else { throw PhotoProcessingError.unreadableImage }
         let crop = CropGeometry.rect(width: Double(cg.width), height: Double(cg.height), aspectRatio: orientation.aspectRatio)
         guard let cropped = cg.cropping(to: crop.integral) else { throw PhotoProcessingError.unreadableImage }
-        // Original Latent look; this is not an official film-stock emulation.
-        let color = CIFilter.colorControls()
-        color.inputImage = CIImage(cgImage: cropped)
-        color.saturation = 0.9; color.contrast = 1.04; color.brightness = 0.01
-        guard let output = color.outputImage,
-              let rendered = ciContext.createCGImage(output, from: output.extent) else { throw PhotoProcessingError.unreadableImage }
+        // Latent's own looks; not an emulation of any commercial film.
+        let output = FilmLook.apply(CIImage(cgImage: cropped), stock: stock, seed: seed)
+        guard let rendered = ciContext.createCGImage(output, from: output.extent) else { throw PhotoProcessingError.unreadableImage }
         let image = UIImage(cgImage: rendered)
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
         let scale = min(1, 500 / max(image.size.width, image.size.height))

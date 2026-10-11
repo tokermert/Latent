@@ -1,6 +1,6 @@
 # Latent — Ürün Gereksinimleri Dokümanı
 
-**Sürüm:** 0.2 MVP  
+**Sürüm:** 0.3 MVP  
 **Tarih:** 8 Ekim 2026  
 **Durum:** Tasarım yönü seçildi, ilk SwiftUI/AVFoundation prototipi hazır; gerçek cihaz doğrulaması bekliyor. v0.2: rulo/kare yaşam döngüsü kararları, saklama ve yön netleştirmeleri (bkz. §17).  
 **Platform:** iOS 17+  
@@ -53,7 +53,7 @@ MVP’de profesyonel fotoğrafçılar, sosyal ağ yaratıcıları ve topluluk y�
 - Tek cihazda çalışan kişisel fotoğraf arşivi.
 - Yeni rulo oluşturma ve isim verme.
 - 36 karelik rulo sınırı.
-- İlk film görünümü: `Latent Color 400`.
+- Dört özgün film görünümü: `Latent Color 400`, `Latent Gold 200`, `Latent Slide 100`, `Latent Mono 400`. Film yeni rulo başlarken seçilir ve rulo boyunca değişmez; seçim ekranında her film için gerçek görünüm motoruyla üretilmiş 4 örnek ve filmsiz karşılaştırma gösterilir.
 - Arka ana kamera, sabit 1× kadraj; zoom kontrolü yok.
 - Dikey 2:3 ve yatay 3:2 çekim.
 - Kamera önizlemesinde film çerçevesi.
@@ -88,7 +88,7 @@ MVP’de profesyonel fotoğrafçılar, sosyal ağ yaratıcıları ve topluluk y�
 1. Kullanıcı Latent’i açar.
 2. Arşiv boşsa “İlk rulonu başlat” çağrısını görür.
 3. Ruloya isim verir; örneğin `London`.
-4. Film bilgisi gösterilir: `Latent Color 400 · 36 kare · 35 mm film`.
+4. Film seçilir (varsayılan `Latent Color 400`); her filmin örnekleri gösterilir. Seçilen film rulo boyunca kilitlidir.
 5. Kamera izni istenir ve kamera ekranı açılır.
 
 ### Gezi sırasında çekim
@@ -340,8 +340,7 @@ Fotoğraf varlıkları ve manifest ayrı dosyalarda tutulduğu için süreç ani
 ### Faz 3 — Görsel karakter seçenekleri
 
 - Sabit 35 mm ve 50 mm kadrajları.
-- Sınırlı film görünümleri.
-- Film seçimini rulo başında kilitleme.
+- Ek film görünümleri (MVP'de 4 film var; v0.3).
 - Ücretli görünüm paketleri.
 
 ### Faz 4 — Paylaşım ve topluluk
@@ -375,5 +374,6 @@ Fotoğraf varlıkları ve manifest ayrı dosyalarda tutulduğu için süreç ani
 
 ## 17. Değişiklik geçmişi
 
+- **0.3 (11 Ekim 2026):** Film seçimi Faz 3'ten MVP'ye alındı: 4 özgün film (Color 400, Gold 200, Slide 100, Mono 400), rulo başında seçim ve kilit, gerçek motorla üretilen örnekler. Marka adı kullanılmaz (§13).
 - **0.2 (8 Ekim 2026):** Tek aktif rulo kuralı; rulo adı değiştirme, rulo/kare silme (silme kare hakkı iade etmez), kapak seçimi; ~12 MP kayıt, JPEG orijinal, iCloud yedeği notu; cihaz yönünden kayıt (`RotationCoordinator`); orphan ve geçici dosya temizliği MVP'ye alındı; manifest sürümleme; "35 mm film" ifadesi; ölçüm yöntemi TestFlight betası olarak belirlendi; açık soruların bir kısmı yanıtlandı.
 - **0.1 (8 Ekim 2026):** İlk MVP tanımı.

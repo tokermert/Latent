@@ -153,10 +153,12 @@ final class CameraModel: ObservableObject {
         let rotation = captureAngle
         let orientation = frameOrientation(for: rotation)
         saveTarget = (library, rollID)
+        let stock = library.roll(rollID)?.stock ?? .default
+        let seed = FilmLook.seed(for: UUID())
         do {
             let data = try await service.capture(rotation: rotation)
             pending = try await Task.detached(priority: .userInitiated) {
-                try PhotoProcessor.process(data: data, orientation: orientation)
+                try PhotoProcessor.process(data: data, orientation: orientation, stock: stock, seed: seed)
             }.value
         } catch { errorMessage = error.localizedDescription }
         if pending != nil { await persist() }
@@ -258,7 +260,7 @@ struct CameraView: View {
             // The *inside* of the frame, rather than the frame including its border,
             // must have the same aspect ratio as the saved crop.
             let width = max(1, min(geometry.size.width - 37, (geometry.size.height - 39) * orientation.aspectRatio))
-            FilmBorder(number: min(FilmRoll.capacity, roll?.nextFrameNumber ?? 1), film: roll?.film ?? "LATENT COLOR 400", date: Date()) {
+            FilmBorder(number: min(FilmRoll.capacity, roll?.nextFrameNumber ?? 1), film: roll?.film ?? FilmStock.default.name, date: Date()) {
                 CameraPreview(session: camera.service.session, rotationAngle: camera.previewAngle) { camera.attach(previewLayer: $0) }
                     .frame(width: width, height: width / orientation.aspectRatio)
                     .dateStamp(Date())
