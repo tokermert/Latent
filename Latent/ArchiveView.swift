@@ -153,6 +153,7 @@ struct NewRollView: View {
     @State private var error: String?
     /// Film rulo boyunca kilitli; yalnızca burada seçilir.
     @State private var stock = FilmStock.default
+    @FocusState private var titleFocused: Bool
     /// true ise kaydedince mevcut aktif rulo tamamlanır (kullanıcı arşivde onayladı).
     var finishingActive = false
     let onCreated: (FilmRoll) -> Void
@@ -161,7 +162,12 @@ struct NewRollView: View {
             Form {
                 Section("Bu rulonun hikâyesi") {
                     TextField("Örneğin London", text: $title).textInputAutocapitalization(.words)
+                        .focused($titleFocused)
                         .onChange(of: title) { _, new in if new.count > RollTitle.limit { title = String(new.prefix(RollTitle.limit)) } }
+                        // Satırın boş kısmına dokunulduğunda da alana odaklanır.
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { titleFocused = true }
                 }
                 Section {
                     FilmPicker(selection: $stock)
