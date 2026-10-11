@@ -160,4 +160,44 @@ final class RollRulesTests: XCTestCase {
         XCTAssertEqual(decoded.rollCount, 1); XCTAssertEqual(decoded.rolls[0].finishKind, .inProgress)
         XCTAssertEqual(decoded.generatedAt, generated)
     }
+
+    // MARK: Film stock
+
+    func testFilmStockLookup() {
+        XCTAssertEqual(FilmStock.all.map(\.id), ["color400", "gold200", "slide100", "mono400"])
+        XCTAssertEqual(Set(FilmStock.all.map(\.name)).count, FilmStock.all.count)
+        XCTAssertEqual(FilmStock.default, .color400)
+        XCTAssertEqual(FilmStock.stock(id: "mono400"), .mono400)
+        XCTAssertNil(FilmStock.stock(id: "nope"))
+        XCTAssertEqual(FilmStock.stock(named: "LATENT GOLD 200"), .gold200)
+        XCTAssertEqual(FilmStock.stock(named: "LATENT COLOR 400"), .color400)
+        XCTAssertEqual(FilmStock.stock(named: "SOMETHING ELSE 800"), .default)
+        XCTAssertEqual(FilmRoll(title: "X").stock, .color400)
+        XCTAssertTrue(FilmStock.mono400.isMonochrome)
+        XCTAssertTrue(FilmStock.all.filter { $0 != .mono400 }.allSatisfy { !$0.isMonochrome })
+    }
+
+    func testLegacyManifestFilmResolvesToDefaultStock() async throws {
+        let dir = try directory()
+        let legacy = Data(#"{"version":2,"rolls":[{"id":"\#(UUID().uuidString)","title":"A","createdAt":0,"film":"LATENT COLOR 400","frames":[],"exposuresUsed":0},{"id":"\#(UUID().uuidString)","title":"B","createdAt":50,"film":"OLD FILM","frames":[],"exposuresUsed":36}]}"#.utf8)
+        try legacy.write(to: manifest(dir))
+        let rolls = try await RollRepository(directory: dir).load()
+        XCTAssertEqual(rolls.map(\.stock), [.color400, .color400])
+        XCTAssertEqual(rolls[1].film, "OLD FILM", "Stored name must not be rewritten")
+    }
+
+    func testNewRollKeepsChosenStockAcrossRelaunch() async throws {
+        let dir = try directory(); let repository = RollRepository(directory: dir); _ = try await repository.load()
+        let roll = try await repository.createRoll(title: "Lizbon", stock: .slide100)[0]
+        XCTAssertEqual(roll.stock, .slide100); XCTAssertEqual(roll.film, "LATENT SLIDE 100")
+        _ = try await repository.append(to: roll.id, orientation: .portrait, files: files)
+        let reopened = try await RollRepository(directory: dir).load()
+        XCTAssertEqual(reopened[0].stock, .slide100)
+        let next = try await repository.createRoll(title: "Roma", stock: .mono400, finishingActive: true)
+        XCTAssertEqual(next.map(\.stock), [.mono400, .slide100])
+        let plain = try await RollRepository(directory: try directory())
+        _ = try await plain.load()
+        let defaulted = try await plain.createRoll(title: "Varsayılan")[0]
+        XCTAssertEqual(defaulted.stock, .default)
+    }
 }

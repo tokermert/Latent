@@ -153,10 +153,12 @@ final class CameraModel: ObservableObject {
         let rotation = captureAngle
         let orientation = frameOrientation(for: rotation)
         saveTarget = (library, rollID)
+        let stock = library.roll(rollID)?.stock ?? .default
+        let seed = FilmLook.seed(for: UUID())
         do {
             let data = try await service.capture(rotation: rotation)
             pending = try await Task.detached(priority: .userInitiated) {
-                try PhotoProcessor.process(data: data, orientation: orientation)
+                try PhotoProcessor.process(data: data, orientation: orientation, stock: stock, seed: seed)
             }.value
         } catch { errorMessage = error.localizedDescription }
         if pending != nil { await persist() }

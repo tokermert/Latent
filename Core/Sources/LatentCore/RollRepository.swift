@@ -76,7 +76,8 @@ public actor RollRepository {
 
     /// Throws `activeRollExists` while a roll is open, unless `finishingActive` is true: then the
     /// active roll is finished and the new one created in the same manifest commit.
-    public func createRoll(title: String, finishingActive: Bool = false) throws -> [FilmRoll] {
+    /// The film is stored by name and stays locked for the life of the roll.
+    public func createRoll(title: String, stock: FilmStock = .default, finishingActive: Bool = false) throws -> [FilmRoll] {
         guard var next = snapshot else { throw LibraryError.notLoaded }
         let title = try Self.normalizedTitle(title)
         if let active = FilmRoll.activeRoll(in: next.rolls) {
@@ -84,7 +85,7 @@ public actor RollRepository {
             let index = next.rolls.firstIndex(where: { $0.id == active.id })!
             next.rolls[index].finishedAt = Date()
         }
-        next.rolls.insert(FilmRoll(title: title), at: 0)
+        next.rolls.insert(FilmRoll(title: title, stock: stock), at: 0)
         try commit(next)
         return next.rolls
     }

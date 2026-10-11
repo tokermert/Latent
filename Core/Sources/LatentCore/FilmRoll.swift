@@ -29,6 +29,50 @@ public struct FilmFrame: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// A film look chosen when a roll is started; locked for the whole roll.
+/// Names are Latent's own. They do not claim to emulate any commercial film.
+public struct FilmStock: Identifiable, Codable, Hashable, Sendable {
+    public let id: String
+    /// Stored in the roll manifest as `FilmRoll.film`, e.g. "LATENT COLOR 400".
+    public let name: String
+    /// Edge print and labels, e.g. "COLOR 400".
+    public let shortName: String
+    public let iso: Int
+    /// One Turkish sentence for the film picker.
+    public let summary: String
+    public let isMonochrome: Bool
+
+    public init(id: String, name: String, shortName: String, iso: Int, summary: String, isMonochrome: Bool) {
+        self.id = id; self.name = name; self.shortName = shortName
+        self.iso = iso; self.summary = summary; self.isMonochrome = isMonochrome
+    }
+
+    public static let color400 = FilmStock(
+        id: "color400", name: "LATENT COLOR 400", shortName: "COLOR 400", iso: 400,
+        summary: "Dengeli, doğal renkler; her ışıkta güvenilir gündelik film.", isMonochrome: false)
+    public static let gold200 = FilmStock(
+        id: "gold200", name: "LATENT GOLD 200", shortName: "GOLD 200", iso: 200,
+        summary: "Sıcak, altın tonlar ve yumuşak gölgeler; ten rengini güzel gösterir.", isMonochrome: false)
+    public static let slide100 = FilmStock(
+        id: "slide100", name: "LATENT SLIDE 100", shortName: "SLIDE 100", iso: 100,
+        summary: "Canlı, doygun renkler ve derin gölgeler; gökyüzü ve manzara için temiz dia görünümü.", isMonochrome: false)
+    public static let mono400 = FilmStock(
+        id: "mono400", name: "LATENT MONO 400", shortName: "MONO 400", iso: 400,
+        summary: "Güçlü kontrastlı siyah-beyaz, belirgin gren ve koyu gökyüzü.", isMonochrome: true)
+
+    /// Picker order.
+    public static let all: [FilmStock] = [color400, gold200, slide100, mono400]
+    /// The look every roll had before films could be chosen.
+    public static let `default` = color400
+
+    public static func stock(id: String) -> FilmStock? { all.first { $0.id == id } }
+    /// Resolves a manifest `film` name. Unknown or older names fall back to `default`.
+    public static func stock(named name: String) -> FilmStock {
+        let key = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return all.first { $0.name == key } ?? .default
+    }
+}
+
 public struct FilmRoll: Identifiable, Codable, Hashable, Sendable {
     public static let capacity = 36
     public let id: UUID
@@ -52,9 +96,11 @@ public struct FilmRoll: Identifiable, Codable, Hashable, Sendable {
         if let coverFrameID, let frame = frames.first(where: { $0.id == coverFrameID }) { return frame }
         return frames.first
     }
-    public init(title: String, id: UUID = UUID(), createdAt: Date = Date()) {
+    /// Look applied to this roll's developed photos, resolved from the stored `film` name.
+    public var stock: FilmStock { FilmStock.stock(named: film) }
+    public init(title: String, stock: FilmStock = .default, id: UUID = UUID(), createdAt: Date = Date()) {
         self.id = id; self.title = title; self.createdAt = createdAt
-        self.film = "LATENT COLOR 400"; self.frames = []; self.finishedAt = nil
+        self.film = stock.name; self.frames = []; self.finishedAt = nil
         self.exposuresUsed = 0; self.coverFrameID = nil
         self.albumOpenCount = 0; self.shareCount = 0
     }
