@@ -91,11 +91,13 @@ private struct FilmCard: View {
 
 /// `FilmSamples` örneğini yükler; gelene kadar gri yer tutucu ve ProgressView gösterir.
 /// `fixedAspectRatio` verilirse görsel o orana kırpılır (kontakt şerit); verilmezse kendi oranıyla gösterilir.
+/// `base` true ise filmin uygulanmadığı taban görüntü (`FilmSamples.baseImage`) yüklenir.
 struct FilmSampleImage: View {
     let stock: FilmStock
     let index: Int
-    let maxPixel: Int
+    let maxPixel: CGFloat
     var fixedAspectRatio: Double? = nil
+    var base = false
     @State private var image: UIImage?
     @State private var failed = false
     private var aspectRatio: Double {
@@ -118,7 +120,9 @@ struct FilmSampleImage: View {
         .clipped()
         .task(id: stock.id) {
             image = nil; failed = false
-            let loaded = await FilmSamples.image(stock: stock, index: index, maxPixel: maxPixel)
+            let loaded = base
+                ? await FilmSamples.baseImage(index: index, maxPixel: maxPixel)
+                : await FilmSamples.image(stock: stock, index: index, maxPixel: maxPixel)
             guard !Task.isCancelled else { return }
             image = loaded; failed = loaded == nil
         }
@@ -126,10 +130,16 @@ struct FilmSampleImage: View {
 }
 
 /// Örneklerin büyük görünümü: sayfa sayfa kaydırılır, kenarda film adı ve örnek numarası.
+/// Basılı tutunca filmsiz taban görüntü gösterilir; bırakınca film. VoiceOver'da "Filmsiz göster" eylemi.
 struct FilmSampleViewer: View {
     let stock: FilmStock
     @State private var index: Int
+    /// Parmak ekrandayken ve kaydırma başlamadan (10 pt) true.
+    @GestureState private var pressing = false
+    /// VoiceOver eylemiyle açılan filmsiz görünüm; sayfa değişince kapanır.
+    @State private var baseToggled = false
     @Environment(\.dismiss) private var dismiss
+    private var showingBase: Bool { pressing || baseToggled }
     init(stock: FilmStock, startIndex: Int) {
         self.stock = stock
         _index = State(initialValue: startIndex)
@@ -139,18 +149,43 @@ struct FilmSampleViewer: View {
             VStack(spacing: 18) {
                 TabView(selection: $index) {
                     ForEach(0..<FilmSamples.count, id: \.self) { i in
+                        let base = showingBase && i == index
                         FilmBorder(number: i + 1, film: stock.name) {
-                            FilmSampleImage(stock: stock, index: i, maxPixel: 1600)
+                            // İki görüntü üst üste; taban önceden yüklenir, geçiş anında olur.
+                            ZStack {
+                                FilmSampleImage(stock: stock, index: i, maxPixel: 1600)
+                                FilmSampleImage(stock: stock, index: i, maxPixel: 1600, base: true)
+                                    .opacity(base ? 1 : 0)
+                            }
+                            .overlay(alignment: .topLeading) {
+                                if base {
+                                    Text("FİLMSİZ").font(.system(.caption2, design: .monospaced).weight(.semibold))
+                                        .padding(.horizontal, 6).padding(.vertical, 3)
+                                        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
+                                        .foregroundStyle(.white).padding(8)
+                                        .accessibilityHidden(true)
+                                }
+                            }
                         }
                         .padding(.horizontal, 20)
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0).updating($pressing) { value, state, _ in
+                                state = abs(value.translation.width) < 10 && abs(value.translation.height) < 10
+                            }
+                        )
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Örnek \(i + 1), \(stock.spokenShortName)")
+                        .accessibilityLabel("Örnek \(i + 1), \(base ? "filmsiz" : stock.spokenShortName)")
                         .accessibilityAddTraits(.isImage)
+                        .accessibilityAction(named: base ? "Filmle göster" : "Filmsiz göster") { baseToggled.toggle() }
                         .tag(i)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
+                .onChange(of: index) { baseToggled = false }
+                Text("Filmsiz hâlini görmek için basılı tut.").font(.footnote).foregroundStyle(LatentTheme.muted)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
                     MicroLabel(text: stock.isMonochrome ? "\(stock.name) · ISO \(stock.iso) · S/B" : "\(stock.name) · ISO \(stock.iso)")
                     Text(stock.summary).font(.subheadline).foregroundStyle(LatentTheme.muted)

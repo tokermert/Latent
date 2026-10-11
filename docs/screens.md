@@ -51,7 +51,7 @@ Yeni rulo başlatırken kullanıcı **4 filmden** birini seçer (`FilmStock.all`
 - **VoiceOver:** Kart "Latent Gold 200, ISO 200, <karakter>, seçili"; örnekler "Örnek 1, Gold 200". Adlar POSIX yerel ayarıyla büyük/küçük harfe çevrilir (Türkçe dönüşüm "SLIDE"ı "Slıde" yapardı).
 
 **Açık sorular (film seçimi)**
-1. **"Filmsiz" karşılaştırma:** Büyük görünümde basılı tutunca taban (işlenmemiş) görüntüyü göstermek çok değerli olur. Bunun için Film ajanından ayrı bir API gerekir (ör. `FilmSamples.baseImage(index:maxPixel:)`); şimdilik eklenmedi, uydurma bir taban kullanılmadı.
+1. ~~"Filmsiz" karşılaştırma~~ → yapıldı: büyük görünümde basılı tutunca taban görüntü (`FilmSamples.baseImage`) ve "FİLMSİZ" etiketi; bırakınca film. VoiceOver'da "Filmsiz göster" eylemi. Kaydırma 10 pt'yi geçince basılı tutma bırakılmış sayılır.
 2. Kartlar yatay kaydırma mı kalsın, yoksa 2×2 film kutusu ızgarası mı? Dört filmin hepsi aynı anda görünmüyor.
 3. Seçilen film kamerada daha görünür olsun mu (ör. vizör kenarı ya da sayaç yanında film rengiyle küçük işaret)?
 4. Kartlarda film kutusu illüstrasyonu (gerçek marka taklidi olmadan) ister miyiz?
@@ -203,4 +203,4 @@ Mert cihazda test edemezken ilerleyebilmek için aşağıdakiler **iOS'un yerle�
 ## Bağımlılıklar
 
 - Silme, ad değiştirme, kapak, tek aktif rulo ve ölçüm API'leri `integration/wave-2`'de.
-- Film ajanından (`agent/film`) gelecek, bu dalda henüz derlenmeyen API'ler: `FilmStock` (`id`, `name`, `shortName`, `iso`, `summary`, `isMonochrome`, `all`, `default`), `FilmRoll.stock`, `LibraryModel.createRoll(title:stock:finishingActive:)`, `FilmSamples.count`, `FilmSamples.image(stock:index:maxPixel:)` (`maxPixel` `Int` varsayıldı). Koordinatör dalları entegrasyonda birleştirecek.
+- Film ajanından (`agent/film`) gelecek, bu dalda henüz derlenmeyen API'ler: `FilmStock` (`id`, `name`, `shortName`, `iso`, `summary`, `isMonochrome`, `all`, `default`), `FilmRoll.stock`, `LibraryModel.createRoll(title:stock:finishingActive:)`, `FilmSamples.count`, `FilmSamples.image(stock:index:maxPixel:)`, `FilmSamples.baseImage(index:maxPixel:)` (`maxPixel` CGFloat, PR #11). Koordinatör dalları entegrasyonda birleştirecek.
